@@ -1,0 +1,35 @@
+# Environment files
+.env
+*.env
+*.env.*
+!.env.example
+
+# TLS/SSL Keys and Certificates
+*.key
+*.pem
+*.crt
+
+# Go binaries and build outputs
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+dist/
+*.log
+
+# Dependency directories
+vendor/
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db

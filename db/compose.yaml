@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: betwin_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    deploy:
+      resources:
+        limits: #Maximum resources that a container can use
+          cpus: "4"
+          memory: 4G
+        reservations: #What container will be guaranteed to have
+          cpus: "2"
+          memory: 2G
+
+volumes:
+  postgres_data:
