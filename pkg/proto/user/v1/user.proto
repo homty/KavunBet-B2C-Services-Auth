@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package betwin.user.v1;
+
+option go_package = "betwin/pkg/proto/user/v1;userv1";
+
+// UserService handles profile creation and public profile retrieval.
+service UserService {
+    // ProvisionProfile is called during user registration to set up basic profile info.
+    rpc ProvisionProfile(ProvisionProfileRequest) returns (ProvisionProfileResponse);
+    
+    // GetPublicProfile retrieves public profile details for a given user ID.
+    rpc GetPublicProfile(GetPublicProfileRequest) returns (GetPublicProfileResponse);
+}
+
+message ProvisionProfileRequest {
+    int64 user_id = 1;
+    string username = 2;
+    string contact_info = 3;
+}
+
+message ProvisionProfileResponse {
+    int64 user_id = 1;
+    string username = 2;
+}
+
+message GetPublicProfileRequest {
+    int64 target_user_id = 1;
+}
+
+message GetPublicProfileResponse {
+    int64 user_id = 1;
+    string username = 2;
+    string display_name = 3;
+    string avatar_url = 4;
+    string bio = 5;
+}

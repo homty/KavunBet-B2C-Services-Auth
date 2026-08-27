@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package betwin.wallet.v1;
+
+option go_package = "betwin/pkg/proto/wallet/v1;walletv1";
+
+// WalletService handles wallet provisioning and balance queries.
+service WalletService {
+    // ProvisionWallet is called during user registration to create an initial wallet.
+    rpc ProvisionWallet(ProvisionWalletRequest) returns (ProvisionWalletResponse);
+    
+    // GetBalance retrieves the current coin balance for a user.
+    rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+}
+
+message ProvisionWalletRequest {
+    int64 user_id = 1;
+}
+
+message ProvisionWalletResponse {
+    int64 wallet_id = 1;
+    int64 user_id = 2;
+    int64 balance = 3;
+}
+
+message GetBalanceRequest {
+    int64 user_id = 1;
+}
+
+message GetBalanceResponse {
+    int64 user_id = 1;
+    int64 balance = 2;
+}
