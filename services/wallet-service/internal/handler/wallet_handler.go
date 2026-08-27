@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"net/http"
-	"strconv"
 )
 
 type WalletHandler struct {
@@ -33,8 +32,7 @@ func (handler *WalletHandler) RegisterRoutes(router chi.Router) {
 	router.Group(func(router chi.Router) {
 		router.Use(middleware.AuthMiddleware(handler.jwtSecret))
 		router.Get("/api/v1/wallet/balance", handler.GetBalance)
-		router.Post("api/v1/wallet/daily-claim", handler.ClaimDaily)
-		router.Get("/api/v1/wallet/{id}", handler.GetWalletByID)
+		router.Post("/api/v1/wallet/daily-claim", handler.ClaimDaily)
 	})
 }
 
@@ -80,25 +78,6 @@ func (handler *WalletHandler) ClaimDaily(writer http.ResponseWriter, request *ht
 	}
 
 	response.RespondWithJSON(writer, http.StatusOK, claimRepository)
-}
-
-func (handler *WalletHandler) GetWalletByID(writer http.ResponseWriter, request *http.Request) {
-	idStr := chi.URLParam(request, "id")
-	walletID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		response.RespondWithError(writer, http.StatusBadRequest, "INVALID_WALLET_ID", "Invalid wallet ID parameter")
-		return
-	}
-	wallet, err := handler.walletService.GetWalletByID(request.Context(), walletID)
-	if err != nil {
-		if errors.Is(err, repository.ErrWalletNotFound) {
-			response.RespondWithError(writer, http.StatusNotFound, "WALLET_NOT_FOUND", "Wallet not found")
-			return
-		}
-		response.RespondWithError(writer, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to fetch wallet")
-		return
-	}
-	response.RespondWithJSON(writer, http.StatusOK, wallet)
 }
 
 func (handler *WalletHandler) HealthCheck(writer http.ResponseWriter, request *http.Request) {

@@ -14,9 +14,28 @@ import (
 var ErrProfileNotFound = errors.New("Profile Not Found")
 
 type ProfileRepository interface {
+	ProvisionProfile(context context.Context, userID int64, username string, contactInfo string) (*domain.UserProfile, error)
 	GetProfileByUserID(context context.Context, userID int64) (*domain.UserProfile, error)
 	UpdateProfile(context context.Context, userID int64, request domain.UpdateProfileRequest) (*domain.UserProfile, error)
 	GetPublicProfileByID(context context.Context, userID int64) (*domain.PublicProfileResponse, error)
+}
+
+func (repository *postgresProfileRepository) ProvisionProfile(context context.Context, userID int64, username string, contactInfo string) (*domain.UserProfile, error) {
+	var contactPtr *string
+	if contactInfo != "" {
+		contactPtr = &contactInfo
+	}
+
+	query := `
+		INSERT INTO user_profiles (user_id, username, contact_info)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO NOTHING;
+	`
+	if _, err := repository.pool.Exec(context, query, userID, username, contactPtr); err != nil {
+		return nil, fmt.Errorf("failed to provision user profile: %w", err)
+	}
+
+	return repository.GetProfileByUserID(context, userID)
 }
 
 type postgresProfileRepository struct {
@@ -29,7 +48,7 @@ func NewProfileRepository(pool *pgxpool.Pool) ProfileRepository {
 
 func (repository *postgresProfileRepository) GetProfileByUserID(context context.Context, userID int64) (*domain.UserProfile, error) {
 	query := `
-		SELECT user_id, contact_info, display_name, bio, avatar_url, updated_at
+		SELECT user_id, username, contact_info, display_name, bio, avatar_url, updated_at
 		FROM user_profiles
 		WHERE user_id = $1;
 	`
@@ -38,6 +57,7 @@ func (repository *postgresProfileRepository) GetProfileByUserID(context context.
 
 	err := repository.pool.QueryRow(context, query, userID).Scan(
 		&profile.UserID,
+		&profile.Username,
 		&profile.ContactInfo,
 		&profile.DisplayName,
 		&profile.Bio,
@@ -78,7 +98,7 @@ func (repository *postgresProfileRepository) UpdateProfile(context context.Conte
 		UPDATE user_profiles
 		SET contact_info = $1, display_name = $2, bio = $3, avatar_url = $4, updated_at = CURRENT_TIMESTAMP
 		WHERE user_id = $5
-		RETURNING user_id, contact_info, display_name, bio, avatar_url, updated_at;
+		RETURNING user_id, username, contact_info, display_name, bio, avatar_url, updated_at;
 	`
 
 	var updated domain.UserProfile
@@ -91,6 +111,7 @@ func (repository *postgresProfileRepository) UpdateProfile(context context.Conte
 		existing.AvatarURL,
 		userID).Scan(
 		&updated.UserID,
+		&updated.Username,
 		&updated.ContactInfo,
 		&updated.DisplayName,
 		&updated.Bio,
@@ -107,10 +128,9 @@ func (repository *postgresProfileRepository) UpdateProfile(context context.Conte
 
 func (repository *postgresProfileRepository) GetPublicProfileByID(context context.Context, userID int64) (*domain.PublicProfileResponse, error) {
 	query := `
-		SELECT u.id, u.username, p.display_name, p.bio, p.avatar_url
-		FROM users u
-		LEFT JOIN user_profiles p ON u.id = p.user_id
-		WHERE u.id = $1
+		SELECT user_id, username, display_name, bio, avatar_url
+		FROM user_profiles
+		WHERE user_id = $1
 	`
 
 	var publicProfile domain.PublicProfileResponse

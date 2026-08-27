@@ -22,6 +22,20 @@ func NewMockWalletRepository() *MockWalletRepository {
 	}
 }
 
+func (m *MockWalletRepository) ProvisionWallet(ctx context.Context, userID int64) (*domain.UserWallet, error) {
+	if existing, err := m.GetWalletByUserID(ctx, userID); err == nil {
+		return existing, nil
+	}
+	wallet := &domain.UserWallet{
+		ID:        int64(len(m.wallets) + 1),
+		UserID:    userID,
+		Balance:   1000,
+		UpdatedAt: time.Now().UTC(),
+	}
+	m.wallets[wallet.ID] = wallet
+	return wallet, nil
+}
+
 func (m *MockWalletRepository) GetWalletByUserID(ctx context.Context, userID int64) (*domain.UserWallet, error) {
 	for _, w := range m.wallets {
 		if w.UserID == userID {
@@ -71,10 +85,10 @@ func TestGetBalance_Success(t *testing.T) {
 
 	// Seed wallet
 	mockRepo.wallets[10] = &domain.UserWallet{
-		ID:          10,
-		UserID:      1,
-		Balance:     1000,
-		UpdatedAt:   time.Now(),
+		ID:        10,
+		UserID:    1,
+		Balance:   1000,
+		UpdatedAt: time.Now(),
 	}
 
 	resp, err := svc.GetBalance(ctx, 1)
@@ -117,5 +131,29 @@ func TestClaimDaily_Success(t *testing.T) {
 	_, err = svc.ClaimDaily(ctx, 2)
 	if !errors.Is(err, repository.ErrDailyClaimAlreadyClaimed) {
 		t.Errorf("Expected ErrDailyClaimAlreadyClaimed on 2nd claim, got %v", err)
+	}
+}
+
+func TestProvisionWallet_Idempotent(t *testing.T) {
+	svc, mockRepo := setupTestWalletService()
+	ctx := context.Background()
+
+	first, err := svc.ProvisionWallet(ctx, 52)
+	if err != nil {
+		t.Fatalf("Expected first provisioning to succeed, got %v", err)
+	}
+	second, err := svc.ProvisionWallet(ctx, 52)
+	if err != nil {
+		t.Fatalf("Expected repeated provisioning to succeed, got %v", err)
+	}
+
+	if first != second {
+		t.Fatal("Expected repeated provisioning to return the existing wallet")
+	}
+	if len(mockRepo.wallets) != 1 {
+		t.Fatalf("Expected one wallet, got %d", len(mockRepo.wallets))
+	}
+	if second.Balance != 1000 {
+		t.Fatalf("Expected starting balance to remain 1000, got %d", second.Balance)
 	}
 }

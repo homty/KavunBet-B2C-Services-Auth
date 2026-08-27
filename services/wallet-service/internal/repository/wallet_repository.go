@@ -17,9 +17,23 @@ var (
 )
 
 type WalletRepository interface {
+	ProvisionWallet(context context.Context, userID int64) (*domain.UserWallet, error)
 	GetWalletByUserID(context context.Context, userID int64) (*domain.UserWallet, error)
 	GetWalletByID(context context.Context, walletID int64) (*domain.UserWallet, error)
 	ClaimDailyReward(context context.Context, userID int64, rewardAmount int64) (*domain.UserWallet, error)
+}
+
+func (repository *postgresWalletRepository) ProvisionWallet(context context.Context, userID int64) (*domain.UserWallet, error) {
+	query := `
+		INSERT INTO user_wallets (user_id)
+		VALUES ($1)
+		ON CONFLICT (user_id) DO NOTHING;
+	`
+	if _, err := repository.pool.Exec(context, query, userID); err != nil {
+		return nil, fmt.Errorf("failed to provision wallet: %w", err)
+	}
+
+	return repository.GetWalletByUserID(context, userID)
 }
 
 type postgresWalletRepository struct {

@@ -12,7 +12,7 @@ import (
 	"betwin/wallet-service/internal/repository"
 )
 
-func setupTestWalletDB(t *testing.T) (repository.WalletRepository, int64) {
+func setupTestWalletDB(t *testing.T, createWallet bool) (repository.WalletRepository, int64) {
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
@@ -34,9 +34,11 @@ func setupTestWalletDB(t *testing.T) (repository.WalletRepository, int64) {
 		t.Fatalf("Failed to insert test user into users table: %v", err)
 	}
 
-	_, err = pool.Exec(ctx, "INSERT INTO user_wallets (user_id, coin_balance) VALUES ($1, 1000)", userID)
-	if err != nil {
-		t.Fatalf("Failed to insert test user_wallet: %v", err)
+	if createWallet {
+		_, err = pool.Exec(ctx, "INSERT INTO user_wallets (user_id, coin_balance) VALUES ($1, 1000)", userID)
+		if err != nil {
+			t.Fatalf("Failed to insert test user_wallet: %v", err)
+		}
 	}
 
 	// Cleanup on test exit
@@ -50,7 +52,7 @@ func setupTestWalletDB(t *testing.T) (repository.WalletRepository, int64) {
 }
 
 func TestWalletRepository_GetAndClaim(t *testing.T) {
-	repo, userID := setupTestWalletDB(t)
+	repo, userID := setupTestWalletDB(t, true)
 	ctx := context.Background()
 
 	// 1. Fetch wallet by user ID
@@ -91,11 +93,32 @@ func TestWalletRepository_GetAndClaim(t *testing.T) {
 }
 
 func TestWalletRepository_NotFound(t *testing.T) {
-	repo, _ := setupTestWalletDB(t)
+	repo, _ := setupTestWalletDB(t, true)
 	ctx := context.Background()
 
 	_, err := repo.GetWalletByUserID(ctx, 99999999)
 	if !errors.Is(err, repository.ErrWalletNotFound) {
 		t.Errorf("Expected ErrWalletNotFound for non-existent ID, got %v", err)
+	}
+}
+
+func TestWalletRepository_ProvisionIdempotent(t *testing.T) {
+	repo, userID := setupTestWalletDB(t, false)
+	ctx := context.Background()
+
+	first, err := repo.ProvisionWallet(ctx, userID)
+	if err != nil {
+		t.Fatalf("Expected first provisioning to succeed, got %v", err)
+	}
+	second, err := repo.ProvisionWallet(ctx, userID)
+	if err != nil {
+		t.Fatalf("Expected repeated provisioning to succeed, got %v", err)
+	}
+
+	if first.ID != second.ID {
+		t.Fatalf("Expected the same wallet ID, got %d and %d", first.ID, second.ID)
+	}
+	if second.Balance != 1000 {
+		t.Fatalf("Expected starting balance to remain 1000, got %d", second.Balance)
 	}
 }

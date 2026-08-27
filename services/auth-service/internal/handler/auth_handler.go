@@ -6,6 +6,7 @@ import (
 	"betwin/auth-service/internal/service"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -16,6 +17,8 @@ import (
 type AuthHandler struct {
 	authService service.AuthService
 }
+
+const maxRequestBodyBytes int64 = 1 << 20
 
 func NewAuthHandler(authService service.AuthService) *AuthHandler {
 	return &AuthHandler{
@@ -40,7 +43,7 @@ func (handler *AuthHandler) RegisterRoutes(route chi.Router) {
 // POST /auth/register
 func (handler *AuthHandler) Register(write http.ResponseWriter, request *http.Request) {
 	var req domain.RegisterRequest
-	if err := json.NewDecoder(request.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(write, request, &req); err != nil {
 		respondWithError(write, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON payload")
 		return
 	}
@@ -49,6 +52,12 @@ func (handler *AuthHandler) Register(write http.ResponseWriter, request *http.Re
 	if err != nil {
 		if errors.Is(err, service.ErrUsernameRequired) {
 			respondWithError(write, http.StatusBadRequest, "USERNAME_REQUIRED", err.Error())
+			return
+		} else if errors.Is(err, service.ErrUsernameTooShort) {
+			respondWithError(write, http.StatusBadRequest, "USERNAME_TOO_SHORT", err.Error())
+			return
+		} else if errors.Is(err, service.ErrUsernameTooLong) {
+			respondWithError(write, http.StatusBadRequest, "USERNAME_TOO_LONG", err.Error())
 			return
 		} else if errors.Is(err, service.ErrPasswordTooShort) {
 			respondWithError(write, http.StatusBadRequest, "PASSWORD_TOO_SHORT", err.Error())
@@ -68,7 +77,7 @@ func (handler *AuthHandler) Register(write http.ResponseWriter, request *http.Re
 // POST /auth/login
 func (handler *AuthHandler) Login(write http.ResponseWriter, request *http.Request) {
 	var req domain.LoginRequest
-	if err := json.NewDecoder(request.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(write, request, &req); err != nil {
 		respondWithError(write, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON payload")
 		return
 	}
@@ -84,6 +93,21 @@ func (handler *AuthHandler) Login(write http.ResponseWriter, request *http.Reque
 	}
 
 	respondWithJSON(write, http.StatusOK, resp)
+}
+
+func decodeJSONBody(write http.ResponseWriter, request *http.Request, destination interface{}) error {
+	request.Body = http.MaxBytesReader(write, request.Body, maxRequestBodyBytes)
+	decoder := json.NewDecoder(request.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(destination); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return errors.New("request body must contain a single JSON object")
+	}
+
+	return nil
 }
 
 // GET auth/me

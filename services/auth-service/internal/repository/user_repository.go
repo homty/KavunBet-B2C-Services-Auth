@@ -42,13 +42,14 @@ func (r *postgresUserRepository) CreateUserWithProfileAndWallet(ctx context.Cont
 	createUserQuery := `
 		INSERT INTO users (username, password_hash)
 		VALUES ($1, $2)
-		RETURNING id, username, password_hash, created_at, updated_at;
+		RETURNING id, username, password_hash, status, created_at, updated_at;
 	`
 	var user domain.User
 	err = tx.QueryRow(ctx, createUserQuery, username, passwordHash).Scan(
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
+		&user.Status,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -65,10 +66,10 @@ func (r *postgresUserRepository) CreateUserWithProfileAndWallet(ctx context.Cont
 		contactPtr = &contactInfo
 	}
 	createProfileQuery := `
-		INSERT INTO user_profiles (user_id, contact_info)
-		VALUES ($1, $2);
+		INSERT INTO user_profiles (user_id, username, contact_info)
+		VALUES ($1, $2, $3);
 	`
-	_, err = tx.Exec(ctx, createProfileQuery, user.ID, contactPtr)
+	_, err = tx.Exec(ctx, createProfileQuery, user.ID, user.Username, contactPtr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert user profile: %w", err)
 	}
@@ -91,7 +92,7 @@ func (r *postgresUserRepository) CreateUserWithProfileAndWallet(ctx context.Cont
 
 func (read *postgresUserRepository) GetUserByUsername(context context.Context, username string) (*domain.User, error) {
 	query := `
-		SELECT id, username, password_hash FROM users WHERE username = $1;
+		SELECT id, username, password_hash, status FROM users WHERE username = $1;
 	`
 
 	var user domain.User
@@ -99,6 +100,7 @@ func (read *postgresUserRepository) GetUserByUsername(context context.Context, u
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
+		&user.Status,
 	)
 
 	if err != nil {
@@ -113,7 +115,7 @@ func (read *postgresUserRepository) GetUserByUsername(context context.Context, u
 
 func (r *postgresUserRepository) GetUserByID(ctx context.Context, id int64) (*domain.User, error) {
 	query := `
-		SELECT id, username, password_hash
+		SELECT id, username, password_hash, status
 		FROM users
 		WHERE id = $1;
 	`
@@ -122,6 +124,7 @@ func (r *postgresUserRepository) GetUserByID(ctx context.Context, id int64) (*do
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
+		&user.Status,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

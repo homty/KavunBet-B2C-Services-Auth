@@ -14,10 +14,10 @@ services:
     deploy:
       resources:
         limits: #Maximum resources that a container can use
-          cpus: "4"
-          memory: 4G
-        reservations: #What container will be guaranteed to have
           cpus: "2"
+          memory: 2.5G
+        reservations: #What container will be guaranteed to have
+          cpus: "1"
           memory: 2G
 
 volumes:

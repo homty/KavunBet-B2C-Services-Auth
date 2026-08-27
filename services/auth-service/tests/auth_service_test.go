@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,7 @@ func (m *MockUserRepository) CreateUserWithProfileAndWallet(ctx context.Context,
 		ID:           int64(len(m.users) + 1),
 		Username:     username,
 		PasswordHash: passwordHash,
+		Status:       domain.AccountStatusActive,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
@@ -57,12 +59,17 @@ func (m *MockUserRepository) GetUserByID(ctx context.Context, id int64) (*domain
 
 // Setup helper for unit tests
 func setupTestAuthService() service.AuthService {
+	authSvc, _ := setupTestAuthServiceWithRepo()
+	return authSvc
+}
+
+func setupTestAuthServiceWithRepo() (service.AuthService, *MockUserRepository) {
 	mockRepo := NewMockUserRepository()
 	cfg := &config.Config{
 		JWTSecret:    "unit_test_jwt_secret_key_12345",
 		AccessJWTTTL: 15 * time.Minute,
 	}
-	return service.NewDBConnection(mockRepo, cfg)
+	return service.NewDBConnection(mockRepo, cfg), mockRepo
 }
 
 func TestRegister_Success(t *testing.T) {
@@ -100,6 +107,66 @@ func TestRegister_ShortPassword(t *testing.T) {
 	_, err := authSvc.Register(ctx, req)
 	if !errors.Is(err, service.ErrPasswordTooShort) {
 		t.Errorf("Expected ErrPasswordTooShort, got %v", err)
+	}
+}
+
+func TestRegister_NormalizesUsername(t *testing.T) {
+	authSvc := setupTestAuthService()
+
+	resp, err := authSvc.Register(context.Background(), domain.RegisterRequest{
+		Username: "  Alice  ",
+		Password: "securepassword123",
+	})
+	if err != nil {
+		t.Fatalf("Expected successful registration, got error: %v", err)
+	}
+	if resp.User.Username != "alice" {
+		t.Fatalf("Expected normalized username %q, got %q", "alice", resp.User.Username)
+	}
+}
+
+func TestRegister_UsernameLength(t *testing.T) {
+	tests := []struct {
+		name     string
+		username string
+		wantErr  error
+	}{
+		{name: "too short", username: "ab", wantErr: service.ErrUsernameTooShort},
+		{name: "too long", username: strings.Repeat("a", 51), wantErr: service.ErrUsernameTooLong},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			authSvc := setupTestAuthService()
+			_, err := authSvc.Register(context.Background(), domain.RegisterRequest{
+				Username: test.username,
+				Password: "securepassword123",
+			})
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("Expected %v, got %v", test.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestLogin_NormalizesUsername(t *testing.T) {
+	authSvc := setupTestAuthService()
+	ctx := context.Background()
+
+	_, err := authSvc.Register(ctx, domain.RegisterRequest{
+		Username: "alice",
+		Password: "securepassword123",
+	})
+	if err != nil {
+		t.Fatalf("Failed to register user: %v", err)
+	}
+
+	_, err = authSvc.Login(ctx, domain.LoginRequest{
+		Username: "  ALICE  ",
+		Password: "securepassword123",
+	})
+	if err != nil {
+		t.Fatalf("Expected normalized login to succeed, got %v", err)
 	}
 }
 
@@ -152,6 +219,28 @@ func TestLogin_WrongPassword(t *testing.T) {
 	})
 	if !errors.Is(err, service.ErrInvalidCredentials) {
 		t.Errorf("Expected ErrInvalidCredentials on wrong password, got %v", err)
+	}
+}
+
+func TestLogin_PendingAccountRejected(t *testing.T) {
+	authSvc, mockRepo := setupTestAuthServiceWithRepo()
+	ctx := context.Background()
+
+	_, err := authSvc.Register(ctx, domain.RegisterRequest{
+		Username: "pending-user",
+		Password: "correctpassword",
+	})
+	if err != nil {
+		t.Fatalf("Failed to register user: %v", err)
+	}
+	mockRepo.users["pending-user"].Status = domain.AccountStatusPending
+
+	_, err = authSvc.Login(ctx, domain.LoginRequest{
+		Username: "pending-user",
+		Password: "correctpassword",
+	})
+	if !errors.Is(err, service.ErrInvalidCredentials) {
+		t.Fatalf("Expected pending account login to be rejected, got %v", err)
 	}
 }
 

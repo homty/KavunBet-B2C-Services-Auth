@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"betwin/auth-service/internal/config"
 	"betwin/auth-service/internal/domain"
@@ -18,6 +20,13 @@ var (
 	ErrInvalidCredentials = errors.New("Invalid username or password")
 	ErrPasswordTooShort   = errors.New("Password must be at least 6 characters long")
 	ErrUsernameRequired   = errors.New("Username is required")
+	ErrUsernameTooShort   = errors.New("Username must be at least 3 characters long")
+	ErrUsernameTooLong    = errors.New("Username cannot exceed 50 characters")
+)
+
+const (
+	minUsernameLength = 3
+	maxUsernameLength = 50
 )
 
 type JWTClaims struct {
@@ -43,8 +52,16 @@ func NewDBConnection(userRepo repository.UserRepository, config *config.Config) 
 }
 
 func (self *authService) Register(context context.Context, request domain.RegisterRequest) (*domain.AuthResponse, error) {
+	request.Username = normalizeUsername(request.Username)
 	if request.Username == "" {
 		return nil, ErrUsernameRequired
+	}
+	usernameLength := utf8.RuneCountInString(request.Username)
+	if usernameLength < minUsernameLength {
+		return nil, ErrUsernameTooShort
+	}
+	if usernameLength > maxUsernameLength {
+		return nil, ErrUsernameTooLong
 	}
 	if len(request.Password) < 6 {
 		return nil, ErrPasswordTooShort
@@ -80,6 +97,7 @@ func (self *authService) Register(context context.Context, request domain.Regist
 }
 
 func (self *authService) Login(context context.Context, request domain.LoginRequest) (*domain.AuthResponse, error) {
+	request.Username = normalizeUsername(request.Username)
 	if request.Username == "" || request.Password == "" {
 		return nil, ErrInvalidCredentials
 	}
@@ -90,6 +108,9 @@ func (self *authService) Login(context context.Context, request domain.LoginRequ
 			return nil, ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("Failed to fetch user: %w", err)
+	}
+	if user.Status != domain.AccountStatusActive {
+		return nil, ErrInvalidCredentials
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(request.Password))
@@ -112,6 +133,10 @@ func (self *authService) Login(context context.Context, request domain.LoginRequ
 			CreatedAt: user.CreatedAt.UTC(),
 		},
 	}, nil
+}
+
+func normalizeUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
 }
 
 func (self *authService) generateJWT(userID int64) (string, int64, error) {

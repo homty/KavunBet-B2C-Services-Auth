@@ -1,7 +1,9 @@
 package main
 
 import (
-	"betwin/user-service/internal/API/handler"
+	userv1 "betwin/pkg/proto/user/v1"
+	user_gRPC "betwin/user-service/internal/API/grpc"
+	"betwin/user-service/internal/API/rest/handler"
 	"betwin/user-service/internal/config"
 	"betwin/user-service/internal/database"
 	"betwin/user-service/internal/repository"
@@ -9,11 +11,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/quic-go/quic-go/http3"
+	grpc "google.golang.org/grpc"
 )
 
 func main() {
@@ -34,8 +38,24 @@ func main() {
 
 	profileRepo := repository.NewProfileRepository(pool)
 	userService := service.NewUserService(profileRepo)
-	userHandler := handler.NewUserHandler(userService, config.JWTSecret)
 
+	grpcPort := ":50051"
+	grpcListener, err := net.Listen("tcp", grpcPort)
+	if err != nil {
+		log.Fatalf("Failed to listen for gRPC on %s: %v", grpcPort, err)
+	}
+	grpcServer := grpc.NewServer()
+	userGrpcHandler := user_gRPC.NewUserGRPCHandler(userService)
+	userv1.RegisterUserServiceServer(grpcServer, userGrpcHandler)
+
+	go func() {
+		log.Printf("gRPC server is running in parallel on tcp://localhost%s\n", grpcPort)
+		if err := grpcServer.Serve(grpcListener); err != nil {
+			log.Fatalf("gRPC server stopped unexpectedly: %v", err)
+		}
+	}()
+
+	userHandler := handler.NewUserHandler(userService, config.JWTSecret)
 	router := chi.NewRouter()
 
 	serverAddress := fmt.Sprintf(":%s", config.Port)

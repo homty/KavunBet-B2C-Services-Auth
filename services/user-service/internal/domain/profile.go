@@ -5,6 +5,7 @@ import "time"
 // UserProfile represents full profile metadata stored in `user_profiles`
 type UserProfile struct {
 	UserID      int64     `json:"user_id"`
+	Username    string    `json:"username"`
 	ContactInfo *string   `json:"contact_info,omitempty"`
 	DisplayName *string   `json:"display_name,omitempty"`
 	Bio         *string   `json:"bio,omitempty"`

@@ -10,9 +10,13 @@ import (
 )
 
 type WalletService interface {
+	ProvisionWallet(ctx context.Context, userID int64) (*domain.UserWallet, error)
 	GetBalance(ctx context.Context, userID int64) (*domain.WalletBalanceResponse, error)
 	ClaimDaily(ctx context.Context, userID int64) (*domain.DailyClaimResponse, error)
-	GetWalletByID(ctx context.Context, walletID int64) (*domain.UserWallet, error)
+}
+
+func (s *walletService) ProvisionWallet(ctx context.Context, userID int64) (*domain.UserWallet, error) {
+	return s.walletRepository.ProvisionWallet(ctx, userID)
 }
 
 type walletService struct {
@@ -69,9 +73,4 @@ func (s *walletService) ClaimDaily(ctx context.Context, userID int64) (*domain.D
 		NewBalance:           updatedWallet.Balance,
 		NextClaimAvailableAt: nextAvailable,
 	}, nil
-}
-
-// GetWalletByID retrieves wallet metadata by wallet_id.
-func (s *walletService) GetWalletByID(ctx context.Context, walletID int64) (*domain.UserWallet, error) {
-	return s.walletRepository.GetWalletByID(ctx, walletID)
 }

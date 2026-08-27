@@ -35,9 +35,9 @@ func setupTestDB(t *testing.T) (repository.ProfileRepository, int64) {
 		t.Fatalf("Failed to insert test user into users table: %v", err)
 	}
 
-	_, err = pool.Exec(ctx, "INSERT INTO user_profiles (user_id, contact_info) VALUES ($1, $2)", userID, "repo_test@example.com")
-	if err != nil {
-		t.Fatalf("Failed to insert test user profile: %v", err)
+	repo := repository.NewProfileRepository(pool)
+	if _, err := repo.ProvisionProfile(ctx, userID, uniqueUsername, "repo_test@example.com"); err != nil {
+		t.Fatalf("Failed to provision test user profile: %v", err)
 	}
 
 	// Cleanup on test exit
@@ -47,7 +47,7 @@ func setupTestDB(t *testing.T) (repository.ProfileRepository, int64) {
 		pool.Close()
 	})
 
-	return repository.NewProfileRepository(pool), userID
+	return repo, userID
 }
 
 func TestProfileRepository_GetAndUpdate(t *testing.T) {
@@ -94,8 +94,23 @@ func TestProfileRepository_GetAndUpdate(t *testing.T) {
 	if pub.UserID != userID {
 		t.Errorf("Expected UserID %d, got %d", userID, pub.UserID)
 	}
+	if pub.Username == "" {
+		t.Fatal("Expected public profile username to come from user_profiles")
+	}
 	if pub.DisplayName == nil || *pub.DisplayName != "Master Predictor" {
 		t.Errorf("Expected DisplayName 'Master Predictor', got %v", pub.DisplayName)
+	}
+}
+
+func TestProfileRepository_ProvisionIdempotent(t *testing.T) {
+	repo, userID := setupTestDB(t)
+
+	profile, err := repo.ProvisionProfile(context.Background(), userID, "ignored-retry-name", "changed@example.com")
+	if err != nil {
+		t.Fatalf("Expected repeated provisioning to succeed, got %v", err)
+	}
+	if profile.ContactInfo == nil || *profile.ContactInfo != "repo_test@example.com" {
+		t.Fatalf("Repeated provisioning overwrote contact info: %v", profile.ContactInfo)
 	}
 }
 

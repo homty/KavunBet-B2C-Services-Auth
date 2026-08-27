@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"betwin/user-service/internal/API/response"
+	"betwin/user-service/internal/API/rest/response"
 
 	"github.com/golang-jwt/jwt/v5"
 )

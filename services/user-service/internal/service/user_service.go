@@ -15,9 +15,19 @@ var (
 )
 
 type UserService interface {
+	ProvisionProfile(context context.Context, userID int64, username string, contactInfo string) (*domain.UserProfile, error)
 	GetMyProfile(context context.Context, userID int64) (*domain.UserProfile, error)
 	UpdateMyProfile(context context.Context, userID int64, request domain.UpdateProfileRequest) (*domain.UserProfile, error)
 	GetPublicProfile(context context.Context, targetUserID int64) (*domain.PublicProfileResponse, error)
+}
+
+func (self *userService) ProvisionProfile(context context.Context, userID int64, username string, contactInfo string) (*domain.UserProfile, error) {
+	profile, err := self.profileRepository.ProvisionProfile(context, userID, username, contactInfo)
+	if err != nil {
+		return nil, err
+	}
+	profile.UpdatedAt = profile.UpdatedAt.UTC()
+	return profile, nil
 }
 
 type userService struct {

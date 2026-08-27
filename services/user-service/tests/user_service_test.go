@@ -13,7 +13,7 @@ import (
 
 // MockProfileRepository simulates PostgreSQL profile table in-memory.
 type MockProfileRepository struct {
-	profiles map[int64]*domain.UserProfile
+	profiles  map[int64]*domain.UserProfile
 	usernames map[int64]string
 }
 
@@ -22,6 +22,25 @@ func NewMockProfileRepository() *MockProfileRepository {
 		profiles:  make(map[int64]*domain.UserProfile),
 		usernames: make(map[int64]string),
 	}
+}
+
+func (m *MockProfileRepository) ProvisionProfile(ctx context.Context, userID int64, username string, contactInfo string) (*domain.UserProfile, error) {
+	if existing, ok := m.profiles[userID]; ok {
+		return existing, nil
+	}
+	var contactPtr *string
+	if contactInfo != "" {
+		contactPtr = &contactInfo
+	}
+	profile := &domain.UserProfile{
+		UserID:      userID,
+		Username:    username,
+		ContactInfo: contactPtr,
+		UpdatedAt:   time.Now().UTC(),
+	}
+	m.profiles[userID] = profile
+	m.usernames[userID] = username
+	return profile, nil
 }
 
 func (m *MockProfileRepository) GetProfileByUserID(ctx context.Context, userID int64) (*domain.UserProfile, error) {
@@ -115,6 +134,30 @@ func TestGetMyProfile_NotFound(t *testing.T) {
 	_, err := svc.GetMyProfile(ctx, 9999)
 	if !errors.Is(err, repository.ErrProfileNotFound) {
 		t.Errorf("Expected ErrProfileNotFound, got %v", err)
+	}
+}
+
+func TestProvisionProfile_Idempotent(t *testing.T) {
+	svc, mockRepo := setupTestUserService()
+	ctx := context.Background()
+
+	first, err := svc.ProvisionProfile(ctx, 52, "alice", "alice@example.com")
+	if err != nil {
+		t.Fatalf("Expected first provisioning to succeed, got %v", err)
+	}
+	second, err := svc.ProvisionProfile(ctx, 52, "alice", "changed@example.com")
+	if err != nil {
+		t.Fatalf("Expected repeated provisioning to succeed, got %v", err)
+	}
+
+	if first != second {
+		t.Fatal("Expected repeated provisioning to return the existing profile")
+	}
+	if len(mockRepo.profiles) != 1 {
+		t.Fatalf("Expected one profile, got %d", len(mockRepo.profiles))
+	}
+	if second.ContactInfo == nil || *second.ContactInfo != "alice@example.com" {
+		t.Fatalf("Repeated provisioning overwrote profile data: %v", second.ContactInfo)
 	}
 }
 
