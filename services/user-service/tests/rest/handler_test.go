@@ -1,4 +1,4 @@
-package tests
+package rest_test
 
 import (
 	"betwin/user-service/internal/API/rest/handler"
