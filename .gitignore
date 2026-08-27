@@ -33,3 +33,16 @@ vendor/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+
+.env.example
+go.mod
+go.sum
+go.work
+go.work.sum
+Makefile
+compose.yaml
+Dockerfile
+*.proto
+*.pb.go
+migrations/*.sql
