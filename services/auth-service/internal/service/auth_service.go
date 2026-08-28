@@ -74,7 +74,7 @@ func (self *authService) Register(context context.Context, request domain.Regist
 	}
 
 	// Save user into DB
-	user, err := self.userRepo.CreateUserWithProfileAndWallet(context, request.Username, string(hashedPassword), request.ContactInfo)
+	user, err := self.userRepo.InitializeUser(context, request.Username, string(hashedPassword), request.ContactInfo)
 	if err != nil {
 		return nil, err
 	}

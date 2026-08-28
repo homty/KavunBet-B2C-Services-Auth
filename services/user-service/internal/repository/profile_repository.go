@@ -8,10 +8,15 @@ import (
 	"betwin/user-service/internal/domain"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrProfileNotFound = errors.New("Profile Not Found")
+var (
+	ErrProfileNotFound     = errors.New("Profile Not Found")
+	ErrProfileIsDuplicated = errors.New("Duplicated Profile")
+)
 
 type ProfileRepository interface {
 	ProvisionProfile(context context.Context, userID int64, username string, contactInfo string) (*domain.UserProfile, error)
@@ -44,6 +49,35 @@ type postgresProfileRepository struct {
 
 func NewProfileRepository(pool *pgxpool.Pool) ProfileRepository {
 	return &postgresProfileRepository{pool: pool}
+}
+
+func (repository *postgresProfileRepository) InitializeProfile(ctx context.Context, userID int64, username, contactInfo string) (*domain.UserProfile, error) {
+	transaction, err := repository.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to establish pool")
+	}
+	defer transaction.Rollback(ctx) //drop transaction if it has error
+
+	query := `INSER INTO user_profiles (user_id, display_name, contact_info)
+	VALUES ($1, $2, $3);`
+
+	var profile domain.UserProfile
+	err = transaction.QueryRow(ctx, query, userID, username, contactInfo).Scan(
+		&profile.UserID,
+		&profile.DisplayName,
+		&profile.ContactInfo,
+		&profile.UpdatedAt,
+	)
+
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, ErrProfileIsDuplicated
+		}
+		return nil, fmt.Errorf("failed to insert user: %w", err)
+	}
+
+	return &profile, nil
 }
 
 func (repository *postgresProfileRepository) GetProfileByUserID(context context.Context, userID int64) (*domain.UserProfile, error) {

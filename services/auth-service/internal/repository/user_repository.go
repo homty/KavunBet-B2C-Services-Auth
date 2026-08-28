@@ -18,7 +18,7 @@ var (
 )
 
 type UserRepository interface {
-	CreateUserWithProfileAndWallet(context context.Context, username, passwordHash, contactInfo string) (*domain.User, error)
+	InitializeUser(context context.Context, username, passwordHash, contactInfo string) (*domain.User, error)
 	GetUserByUsername(context context.Context, username string) (*domain.User, error)
 	GetUserByID(context context.Context, userID int64) (*domain.User, error)
 }
@@ -31,7 +31,8 @@ func NewUserRepository(pool *pgxpool.Pool) UserRepository {
 	return &postgresUserRepository{pool: pool}
 }
 
-func (r *postgresUserRepository) CreateUserWithProfileAndWallet(ctx context.Context, username, passwordHash, contactInfo string) (*domain.User, error) {
+// DONE: Refactor wallet creation was moved to WALLET-SERVICE
+func (r *postgresUserRepository) InitializeUser(ctx context.Context, username, passwordHash, contactInfo string) (*domain.User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -65,6 +66,8 @@ func (r *postgresUserRepository) CreateUserWithProfileAndWallet(ctx context.Cont
 	if contactInfo != "" {
 		contactPtr = &contactInfo
 	}
+
+	//Remove Profile Query. Move to profile-service
 	createProfileQuery := `
 		INSERT INTO user_profiles (user_id, username, contact_info)
 		VALUES ($1, $2, $3);
@@ -72,19 +75,6 @@ func (r *postgresUserRepository) CreateUserWithProfileAndWallet(ctx context.Cont
 	_, err = tx.Exec(ctx, createProfileQuery, user.ID, user.Username, contactPtr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert user profile: %w", err)
-	}
-
-	createWalletQuery := `
-		INSERT INTO user_wallets (user_id, coin_balance)
-		VALUES ($1, 1000);
-	`
-	_, err = tx.Exec(ctx, createWalletQuery, user.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert user wallet: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return &user, nil

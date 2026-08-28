@@ -29,7 +29,7 @@ func setupTestDB(t *testing.T) repository.UserRepository {
 	return repository.NewUserRepository(pool)
 }
 
-func TestCreateUserWithProfileAndWallet(t *testing.T) {
+func TestInitializeUser(t *testing.T) {
 	repo := setupTestDB(t)
 	ctx := context.Background()
 
@@ -37,7 +37,7 @@ func TestCreateUserWithProfileAndWallet(t *testing.T) {
 	passwordHash := "$2a$10$abcdefghijklmnopqrstuvwxyz123456" // Dummy bcrypt hash
 	contactInfo := "test@example.com"
 
-	user, err := repo.CreateUserWithProfileAndWallet(ctx, uniqueUsername, passwordHash, contactInfo)
+	user, err := repo.InitializeUser(ctx, uniqueUsername, passwordHash, contactInfo)
 	if err != nil {
 		t.Fatalf("Expected successful user creation, got error: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestCreateUserWithProfileAndWallet(t *testing.T) {
 	}
 
 	// 2. Duplicate username error
-	_, err = repo.CreateUserWithProfileAndWallet(ctx, uniqueUsername, passwordHash, contactInfo)
+	_, err = repo.InitializeUser(ctx, uniqueUsername, passwordHash, contactInfo)
 	if !errors.Is(err, repository.ErrDuplicateUsername) {
 		t.Errorf("Expected ErrDuplicateUsername on duplicate registration, got %v", err)
 	}
@@ -63,7 +63,7 @@ func TestGetUserByUsername(t *testing.T) {
 	uniqueUsername := fmt.Sprintf("finduser_%d", time.Now().UnixNano())
 	passwordHash := "$2a$10$dummyhashval1234567890"
 
-	createdUser, err := repo.CreateUserWithProfileAndWallet(ctx, uniqueUsername, passwordHash, "find@example.com")
+	createdUser, err := repo.InitializeUser(ctx, uniqueUsername, passwordHash, "find@example.com")
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestGetUserByID(t *testing.T) {
 	uniqueUsername := fmt.Sprintf("finduser_id_%d", time.Now().UnixNano())
 	passwordHash := "$2a$10$dummyhashval1234567890"
 
-	createdUser, err := repo.CreateUserWithProfileAndWallet(ctx, uniqueUsername, passwordHash, "find_id@example.com")
+	createdUser, err := repo.InitializeUser(ctx, uniqueUsername, passwordHash, "find_id@example.com")
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}

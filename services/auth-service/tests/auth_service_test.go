@@ -24,7 +24,7 @@ func NewMockUserRepository() *MockUserRepository {
 	}
 }
 
-func (m *MockUserRepository) CreateUserWithProfileAndWallet(ctx context.Context, username, passwordHash, contactInfo string) (*domain.User, error) {
+func (m *MockUserRepository) InitializeUser(ctx context.Context, username, passwordHash, contactInfo string) (*domain.User, error) {
 	if _, exists := m.users[username]; exists {
 		return nil, repository.ErrDuplicateUsername
 	}

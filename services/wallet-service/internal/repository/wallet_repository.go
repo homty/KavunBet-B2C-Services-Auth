@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
+	ErrDuplicateUser            = errors.New("Duplicate user")
 	ErrWalletNotFound           = errors.New("Wallet not found")
 	ErrDailyClaimAlreadyClaimed = errors.New("Daily bonus already claimed within 24 hours")
 )
@@ -21,6 +23,7 @@ type WalletRepository interface {
 	GetWalletByUserID(context context.Context, userID int64) (*domain.UserWallet, error)
 	GetWalletByID(context context.Context, walletID int64) (*domain.UserWallet, error)
 	ClaimDailyReward(context context.Context, userID int64, rewardAmount int64) (*domain.UserWallet, error)
+	CreateUserWallet(ctx context.Context, userID int64) (*domain.UserWallet, error)
 }
 
 func (repository *postgresWalletRepository) ProvisionWallet(context context.Context, userID int64) (*domain.UserWallet, error) {
@@ -100,6 +103,38 @@ func (repository *postgresWalletRepository) GetWalletByID(context context.Contex
 /*
 	We take
 */
+
+func (repository *postgresWalletRepository) CreateUserWallet(ctx context.Context, userID int64) (*domain.UserWallet, error) {
+	transaction, err := repository.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to begin transaction")
+	}
+	defer transaction.Rollback(ctx)
+
+	createWalletQuery := `
+		INSERT INTO user_wallets (user_id, coin_balance)
+		VALUES ($1, 1000);
+	`
+
+	var wallet domain.UserWallet
+	err = transaction.QueryRow(ctx, createWalletQuery, userID).Scan(
+		&wallet.ID,
+		&wallet.UserID,
+		&wallet.Balance,
+		&wallet.UpdatedAt,
+	)
+
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, ErrDuplicateUser
+		}
+		return nil, fmt.Errorf("failed to insert user: %w", err)
+	}
+
+	return &wallet, nil
+}
+
 func (repository *postgresWalletRepository) ClaimDailyReward(context context.Context, userID int64, rewardAmount int64) (*domain.UserWallet, error) {
 	transaction, err := repository.pool.Begin(context)
 	if err != nil {
