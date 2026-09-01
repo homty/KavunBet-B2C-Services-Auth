@@ -9,8 +9,6 @@ import (
 	"betwin/user-service/internal/domain"
 	"betwin/user-service/internal/repository"
 	"betwin/user-service/internal/service"
-
-	"github.com/stretchr/testify/mock"
 )
 
 // MockProfileRepository simulates PostgreSQL profile table in-memory.

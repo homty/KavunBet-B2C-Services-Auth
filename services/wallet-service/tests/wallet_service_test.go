@@ -36,6 +36,10 @@ func (m *MockWalletRepository) ProvisionWallet(ctx context.Context, userID int64
 	return wallet, nil
 }
 
+func (m *MockWalletRepository) CreateUserWallet(ctx context.Context, userID int64) (*domain.UserWallet, error) {
+	return m.ProvisionWallet(ctx, userID)
+}
+
 func (m *MockWalletRepository) GetWalletByUserID(ctx context.Context, userID int64) (*domain.UserWallet, error) {
 	for _, w := range m.wallets {
 		if w.UserID == userID {
