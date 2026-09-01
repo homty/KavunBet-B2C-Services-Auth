@@ -17,11 +17,12 @@ import (
 )
 
 var (
-	ErrInvalidCredentials = errors.New("Invalid username or password")
-	ErrPasswordTooShort   = errors.New("Password must be at least 6 characters long")
-	ErrUsernameRequired   = errors.New("Username is required")
-	ErrUsernameTooShort   = errors.New("Username must be at least 3 characters long")
-	ErrUsernameTooLong    = errors.New("Username cannot exceed 50 characters")
+	ErrInvalidCredentials  = errors.New("Invalid username or password")
+	ErrPasswordTooShort    = errors.New("Password must be at least 6 characters long")
+	ErrUsernameRequired    = errors.New("Username is required")
+	ErrUsernameTooShort    = errors.New("Username must be at least 3 characters long")
+	ErrUsernameTooLong     = errors.New("Username cannot exceed 50 characters")
+	ErrProfileProvisioning = errors.New("Profile provisioning failed")
 )
 
 const (
@@ -39,19 +40,25 @@ type AuthService interface {
 	ValidateToken(tokenString string) (*JWTClaims, error)
 }
 
-type authService struct {
-	userRepo repository.UserRepository
-	config   *config.Config
+type ProfileProvisioner interface {
+	ProvisionProfile(context.Context, int64, string, string) error
 }
 
-func NewDBConnection(userRepo repository.UserRepository, config *config.Config) AuthService {
+type authService struct {
+	userRepo           repository.UserRepository
+	profileProvisioner ProfileProvisioner
+	config             *config.Config
+}
+
+func NewAuthService(userRepo repository.UserRepository, profileProvisioner ProfileProvisioner, config *config.Config) AuthService {
 	return &authService{
-		userRepo: userRepo,
-		config:   config,
+		userRepo:           userRepo,
+		profileProvisioner: profileProvisioner,
+		config:             config,
 	}
 }
 
-func (self *authService) Register(context context.Context, request domain.RegisterRequest) (*domain.AuthResponse, error) {
+func (self *authService) Register(ctx context.Context, request domain.RegisterRequest) (*domain.AuthResponse, error) {
 	request.Username = normalizeUsername(request.Username)
 	if request.Username == "" {
 		return nil, ErrUsernameRequired
@@ -74,10 +81,32 @@ func (self *authService) Register(context context.Context, request domain.Regist
 	}
 
 	// Save user into DB
-	user, err := self.userRepo.CreateUserWithProfileAndWallet(context, request.Username, string(hashedPassword), request.ContactInfo)
+	user, err := self.userRepo.CreatePendingUser(ctx, request.Username, string(hashedPassword))
 	if err != nil {
 		return nil, err
 	}
+
+	if self.profileProvisioner == nil {
+		err = errors.New("profile provisioner is not configured")
+	} else {
+		err = self.profileProvisioner.ProvisionProfile(ctx, user.ID, user.Username, request.ContactInfo)
+	}
+	if err != nil {
+		provisioningError := fmt.Errorf("%w: %w", ErrProfileProvisioning, err)
+		if statusError := self.markRegistrationFailed(ctx, user.ID); statusError != nil {
+			return nil, errors.Join(provisioningError, fmt.Errorf("Failed to mark registration as failed: %w", statusError))
+		}
+		return nil, provisioningError
+	}
+
+	if err := self.userRepo.UpdateUserStatus(ctx, user.ID, domain.AccountStatusActive); err != nil {
+		activationError := fmt.Errorf("Failed to activate user: %w", err)
+		if statusError := self.markRegistrationFailed(ctx, user.ID); statusError != nil {
+			return nil, errors.Join(activationError, fmt.Errorf("Failed to mark registration as failed: %w", statusError))
+		}
+		return nil, activationError
+	}
+	user.Status = domain.AccountStatusActive
 
 	token, expiresIn, err := self.generateJWT(user.ID)
 	if err != nil {
@@ -94,6 +123,12 @@ func (self *authService) Register(context context.Context, request domain.Regist
 			CreatedAt: user.CreatedAt.UTC(),
 		},
 	}, nil
+}
+
+func (self *authService) markRegistrationFailed(ctx context.Context, userID int64) error {
+	statusContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	return self.userRepo.UpdateUserStatus(statusContext, userID, domain.AccountStatusFailed)
 }
 
 func (self *authService) Login(context context.Context, request domain.LoginRequest) (*domain.AuthResponse, error) {

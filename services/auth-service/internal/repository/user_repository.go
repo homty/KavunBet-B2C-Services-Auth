@@ -18,7 +18,8 @@ var (
 )
 
 type UserRepository interface {
-	CreateUserWithProfileAndWallet(context context.Context, username, passwordHash, contactInfo string) (*domain.User, error)
+	CreatePendingUser(context context.Context, username, passwordHash string) (*domain.User, error)
+	UpdateUserStatus(context context.Context, userID int64, status domain.AccountStatus) error
 	GetUserByUsername(context context.Context, username string) (*domain.User, error)
 	GetUserByID(context context.Context, userID int64) (*domain.User, error)
 }
@@ -31,21 +32,14 @@ func NewUserRepository(pool *pgxpool.Pool) UserRepository {
 	return &postgresUserRepository{pool: pool}
 }
 
-func (r *postgresUserRepository) CreateUserWithProfileAndWallet(ctx context.Context, username, passwordHash, contactInfo string) (*domain.User, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	// 1. Insert into `users` table
+func (r *postgresUserRepository) CreatePendingUser(ctx context.Context, username, passwordHash string) (*domain.User, error) {
 	createUserQuery := `
-		INSERT INTO users (username, password_hash)
-		VALUES ($1, $2)
+		INSERT INTO users (username, password_hash, status)
+		VALUES ($1, $2, 'PENDING')
 		RETURNING id, username, password_hash, status, created_at, updated_at;
 	`
 	var user domain.User
-	err = tx.QueryRow(ctx, createUserQuery, username, passwordHash).Scan(
+	err := r.pool.QueryRow(ctx, createUserQuery, username, passwordHash).Scan(
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
@@ -61,33 +55,22 @@ func (r *postgresUserRepository) CreateUserWithProfileAndWallet(ctx context.Cont
 		return nil, fmt.Errorf("failed to insert user: %w", err)
 	}
 
-	var contactPtr *string
-	if contactInfo != "" {
-		contactPtr = &contactInfo
-	}
-	createProfileQuery := `
-		INSERT INTO user_profiles (user_id, username, contact_info)
-		VALUES ($1, $2, $3);
-	`
-	_, err = tx.Exec(ctx, createProfileQuery, user.ID, user.Username, contactPtr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert user profile: %w", err)
-	}
-
-	createWalletQuery := `
-		INSERT INTO user_wallets (user_id, coin_balance)
-		VALUES ($1, 1000);
-	`
-	_, err = tx.Exec(ctx, createWalletQuery, user.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert user wallet: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
 	return &user, nil
+}
+
+func (r *postgresUserRepository) UpdateUserStatus(ctx context.Context, userID int64, accountStatus domain.AccountStatus) error {
+	commandTag, err := r.pool.Exec(ctx, `
+		UPDATE users
+		SET status = $1, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $2;
+	`, accountStatus, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update user status: %w", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+	return nil
 }
 
 func (read *postgresUserRepository) GetUserByUsername(context context.Context, username string) (*domain.User, error) {

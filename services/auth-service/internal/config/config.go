@@ -9,10 +9,11 @@ import (
 )
 
 type Config struct {
-	Port         string
-	DatabaseURL  string
-	JWTSecret    string
-	AccessJWTTTL time.Duration
+	Port                   string
+	DatabaseURL            string
+	JWTSecret              string
+	UserServiceGRPCAddress string
+	AccessJWTTTL           time.Duration
 }
 
 func Load() (*Config, error) {
@@ -36,12 +37,17 @@ func Load() (*Config, error) {
 	if jwtSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
 	}
+	userServiceGRPCAddress := os.Getenv("USER_SERVICE_GRPC_ADDRESS")
+	if userServiceGRPCAddress == "" {
+		userServiceGRPCAddress = "localhost:50051"
+	}
 
 	return &Config{
-		Port:         port,
-		DatabaseURL:  databaseURL,
-		JWTSecret:    jwtSecret,
-		AccessJWTTTL: 15 * time.Minute,
+		Port:                   port,
+		DatabaseURL:            databaseURL,
+		JWTSecret:              jwtSecret,
+		UserServiceGRPCAddress: userServiceGRPCAddress,
+		AccessJWTTTL:           15 * time.Minute,
 	}, nil
 
 }

@@ -9,6 +9,7 @@ import (
 
 	"betwin/auth-service/internal/config"
 	"betwin/auth-service/internal/database"
+	"betwin/auth-service/internal/domain"
 	"betwin/auth-service/internal/repository"
 )
 
@@ -29,15 +30,14 @@ func setupTestDB(t *testing.T) repository.UserRepository {
 	return repository.NewUserRepository(pool)
 }
 
-func TestCreateUserWithProfileAndWallet(t *testing.T) {
+func TestCreatePendingUser(t *testing.T) {
 	repo := setupTestDB(t)
 	ctx := context.Background()
 
 	uniqueUsername := fmt.Sprintf("testuser_%d", time.Now().UnixNano())
 	passwordHash := "$2a$10$abcdefghijklmnopqrstuvwxyz123456" // Dummy bcrypt hash
-	contactInfo := "test@example.com"
 
-	user, err := repo.CreateUserWithProfileAndWallet(ctx, uniqueUsername, passwordHash, contactInfo)
+	user, err := repo.CreatePendingUser(ctx, uniqueUsername, passwordHash)
 	if err != nil {
 		t.Fatalf("Expected successful user creation, got error: %v", err)
 	}
@@ -48,9 +48,22 @@ func TestCreateUserWithProfileAndWallet(t *testing.T) {
 	if user.Username != uniqueUsername {
 		t.Errorf("Expected username %s, got %s", uniqueUsername, user.Username)
 	}
+	if user.Status != domain.AccountStatusPending {
+		t.Errorf("Expected pending status, got %s", user.Status)
+	}
+	if err := repo.UpdateUserStatus(ctx, user.ID, domain.AccountStatusActive); err != nil {
+		t.Fatalf("Expected status update to succeed, got %v", err)
+	}
+	activeUser, err := repo.GetUserByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("Expected activated user to be readable, got %v", err)
+	}
+	if activeUser.Status != domain.AccountStatusActive {
+		t.Errorf("Expected active status, got %s", activeUser.Status)
+	}
 
 	// 2. Duplicate username error
-	_, err = repo.CreateUserWithProfileAndWallet(ctx, uniqueUsername, passwordHash, contactInfo)
+	_, err = repo.CreatePendingUser(ctx, uniqueUsername, passwordHash)
 	if !errors.Is(err, repository.ErrDuplicateUsername) {
 		t.Errorf("Expected ErrDuplicateUsername on duplicate registration, got %v", err)
 	}
@@ -63,7 +76,7 @@ func TestGetUserByUsername(t *testing.T) {
 	uniqueUsername := fmt.Sprintf("finduser_%d", time.Now().UnixNano())
 	passwordHash := "$2a$10$dummyhashval1234567890"
 
-	createdUser, err := repo.CreateUserWithProfileAndWallet(ctx, uniqueUsername, passwordHash, "find@example.com")
+	createdUser, err := repo.CreatePendingUser(ctx, uniqueUsername, passwordHash)
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
@@ -89,7 +102,7 @@ func TestGetUserByID(t *testing.T) {
 	uniqueUsername := fmt.Sprintf("finduser_id_%d", time.Now().UnixNano())
 	passwordHash := "$2a$10$dummyhashval1234567890"
 
-	createdUser, err := repo.CreateUserWithProfileAndWallet(ctx, uniqueUsername, passwordHash, "find_id@example.com")
+	createdUser, err := repo.CreatePendingUser(ctx, uniqueUsername, passwordHash)
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}

@@ -7,14 +7,18 @@ import (
 	"net/http"
 	"time"
 
+	"betwin/auth-service/internal/client"
 	"betwin/auth-service/internal/config"
 	"betwin/auth-service/internal/database"
 	"betwin/auth-service/internal/handler"
 	"betwin/auth-service/internal/repository"
 	"betwin/auth-service/internal/service"
+	userv1 "betwin/pkg/proto/user/v1"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/quic-go/quic-go/http3"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -35,9 +39,19 @@ func main() {
 	defer pool.Close()
 	log.Println("Successfully connected to PostgreSQL database!")
 
+	userServiceConnection, err := grpc.NewClient(
+		cfg.UserServiceGRPCAddress,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		log.Fatalf("Failed to configure user service gRPC client: %v", err)
+	}
+	defer userServiceConnection.Close()
+
 	//Initialize layers (Dependency Injection)
 	userRepo := repository.NewUserRepository(pool)
-	authSvc := service.NewDBConnection(userRepo, cfg)
+	profileProvisioner := client.NewUserProfileProvisioner(userv1.NewUserServiceClient(userServiceConnection))
+	authSvc := service.NewAuthService(userRepo, profileProvisioner, cfg)
 	authHandler := handler.NewAuthHandler(authSvc)
 
 	//Router & HTTP/3 Alt-Svc middleware
