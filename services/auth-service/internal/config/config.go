@@ -9,11 +9,12 @@ import (
 )
 
 type Config struct {
-	Port                   string
-	DatabaseURL            string
-	JWTSecret              string
-	UserServiceGRPCAddress string
-	AccessJWTTTL           time.Duration
+	HTTPPort                 string
+	DatabaseURL              string
+	JWTSecret                string
+	UserServiceGRPCAddress   string
+	WalletServiceGRPCAddress string
+	AccessJWTTTL             time.Duration
 }
 
 func Load() (*Config, error) {
@@ -24,9 +25,9 @@ func Load() (*Config, error) {
 		}
 	}
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8081"
+	httpPort := os.Getenv("HTTP_PORT")
+	if httpPort == "" {
+		httpPort = "8081"
 	}
 
 	databaseURL := os.Getenv("DATABASE_URL")
@@ -41,13 +42,18 @@ func Load() (*Config, error) {
 	if userServiceGRPCAddress == "" {
 		userServiceGRPCAddress = "localhost:50051"
 	}
+	walletServiceGRPCAddress := os.Getenv("WALLET_SERVICE_GRPC_ADDRESS")
+	if walletServiceGRPCAddress == "" {
+		walletServiceGRPCAddress = "localhost:50052"
+	}
 
 	return &Config{
-		Port:                   port,
-		DatabaseURL:            databaseURL,
-		JWTSecret:              jwtSecret,
-		UserServiceGRPCAddress: userServiceGRPCAddress,
-		AccessJWTTTL:           15 * time.Minute,
+		HTTPPort:                 httpPort,
+		DatabaseURL:              databaseURL,
+		JWTSecret:                jwtSecret,
+		UserServiceGRPCAddress:   userServiceGRPCAddress,
+		WalletServiceGRPCAddress: walletServiceGRPCAddress,
+		AccessJWTTTL:             15 * time.Minute,
 	}, nil
 
 }

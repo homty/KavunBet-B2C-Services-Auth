@@ -20,8 +20,17 @@ var (
 type UserRepository interface {
 	CreatePendingUser(context context.Context, username, passwordHash string) (*domain.User, error)
 	UpdateUserStatus(context context.Context, userID int64, status domain.AccountStatus) error
+	DeleteUser(context context.Context, userID int64) error
 	GetUserByUsername(context context.Context, username string) (*domain.User, error)
 	GetUserByID(context context.Context, userID int64) (*domain.User, error)
+}
+
+func (r *postgresUserRepository) DeleteUser(ctx context.Context, userID int64) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM auth_service.users WHERE id = $1;`, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	return nil
 }
 
 type postgresUserRepository struct {
@@ -34,7 +43,7 @@ func NewUserRepository(pool *pgxpool.Pool) UserRepository {
 
 func (r *postgresUserRepository) CreatePendingUser(ctx context.Context, username, passwordHash string) (*domain.User, error) {
 	createUserQuery := `
-		INSERT INTO users (username, password_hash, status)
+		INSERT INTO auth_service.users (username, password_hash, status)
 		VALUES ($1, $2, 'PENDING')
 		RETURNING id, username, password_hash, status, created_at, updated_at;
 	`
@@ -60,7 +69,7 @@ func (r *postgresUserRepository) CreatePendingUser(ctx context.Context, username
 
 func (r *postgresUserRepository) UpdateUserStatus(ctx context.Context, userID int64, accountStatus domain.AccountStatus) error {
 	commandTag, err := r.pool.Exec(ctx, `
-		UPDATE users
+		UPDATE auth_service.users
 		SET status = $1, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $2;
 	`, accountStatus, userID)
@@ -75,7 +84,9 @@ func (r *postgresUserRepository) UpdateUserStatus(ctx context.Context, userID in
 
 func (read *postgresUserRepository) GetUserByUsername(context context.Context, username string) (*domain.User, error) {
 	query := `
-		SELECT id, username, password_hash, status FROM users WHERE username = $1;
+		SELECT id, username, password_hash, status
+		FROM auth_service.users
+		WHERE username = $1;
 	`
 
 	var user domain.User
@@ -99,7 +110,7 @@ func (read *postgresUserRepository) GetUserByUsername(context context.Context, u
 func (r *postgresUserRepository) GetUserByID(ctx context.Context, id int64) (*domain.User, error) {
 	query := `
 		SELECT id, username, password_hash, status
-		FROM users
+		FROM auth_service.users
 		WHERE id = $1;
 	`
 	var user domain.User

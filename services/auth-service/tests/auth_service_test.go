@@ -18,6 +18,18 @@ type MockUserRepository struct {
 	users              map[string]*domain.User
 	statusUpdateErrors map[domain.AccountStatus]error
 	statusTransitions  []domain.AccountStatus
+	deletedUserIDs     []int64
+}
+
+func (m *MockUserRepository) DeleteUser(_ context.Context, userID int64) error {
+	for username, user := range m.users {
+		if user.ID == userID {
+			delete(m.users, username)
+			m.deletedUserIDs = append(m.deletedUserIDs, userID)
+			return nil
+		}
+	}
+	return nil
 }
 
 func NewMockUserRepository() *MockUserRepository {
@@ -81,6 +93,15 @@ type profileProvisionerStub struct {
 	receivedUsername string
 	receivedContact  string
 	onProvision      func()
+	deleteErr        error
+	deleteCalled     bool
+	deletedUserID    int64
+}
+
+func (stub *profileProvisionerStub) DeleteProfile(_ context.Context, userID int64) error {
+	stub.deleteCalled = true
+	stub.deletedUserID = userID
+	return stub.deleteErr
 }
 
 func (stub *profileProvisionerStub) ProvisionProfile(_ context.Context, userID int64, username, contactInfo string) error {
@@ -94,29 +115,55 @@ func (stub *profileProvisionerStub) ProvisionProfile(_ context.Context, userID i
 	return stub.err
 }
 
+type walletProvisionerStub struct {
+	err            error
+	called         bool
+	receivedUserID int64
+	onProvision    func()
+	deleteErr      error
+	deleteCalled   bool
+	deletedUserID  int64
+}
+
+func (stub *walletProvisionerStub) ProvisionWallet(_ context.Context, userID int64) error {
+	stub.called = true
+	stub.receivedUserID = userID
+	if stub.onProvision != nil {
+		stub.onProvision()
+	}
+	return stub.err
+}
+
+func (stub *walletProvisionerStub) DeleteWallet(_ context.Context, userID int64) error {
+	stub.deleteCalled = true
+	stub.deletedUserID = userID
+	return stub.deleteErr
+}
+
 // Setup helper for unit tests
 func setupTestAuthService() service.AuthService {
-	authSvc, _, _ := setupTestAuthServiceWithDependencies()
+	authSvc, _, _, _ := setupTestAuthServiceWithDependencies()
 	return authSvc
 }
 
 func setupTestAuthServiceWithRepo() (service.AuthService, *MockUserRepository) {
-	authSvc, mockRepo, _ := setupTestAuthServiceWithDependencies()
+	authSvc, mockRepo, _, _ := setupTestAuthServiceWithDependencies()
 	return authSvc, mockRepo
 }
 
-func setupTestAuthServiceWithDependencies() (service.AuthService, *MockUserRepository, *profileProvisionerStub) {
+func setupTestAuthServiceWithDependencies() (service.AuthService, *MockUserRepository, *profileProvisionerStub, *walletProvisionerStub) {
 	mockRepo := NewMockUserRepository()
-	provisioner := &profileProvisionerStub{}
+	profileProvisioner := &profileProvisionerStub{}
+	walletProvisioner := &walletProvisionerStub{}
 	cfg := &config.Config{
 		JWTSecret:    "unit_test_jwt_secret_key_12345",
 		AccessJWTTTL: 15 * time.Minute,
 	}
-	return service.NewAuthService(mockRepo, provisioner, cfg), mockRepo, provisioner
+	return service.NewAuthService(mockRepo, profileProvisioner, walletProvisioner, cfg), mockRepo, profileProvisioner, walletProvisioner
 }
 
 func TestRegister_Success(t *testing.T) {
-	authSvc, mockRepo, provisioner := setupTestAuthServiceWithDependencies()
+	authSvc, mockRepo, provisioner, walletProvisioner := setupTestAuthServiceWithDependencies()
 	ctx := context.Background()
 
 	req := domain.RegisterRequest{
@@ -139,6 +186,9 @@ func TestRegister_Success(t *testing.T) {
 	if !provisioner.called {
 		t.Fatal("Expected registration to provision the user profile")
 	}
+	if !walletProvisioner.called || walletProvisioner.receivedUserID != resp.User.ID {
+		t.Fatalf("Expected wallet provisioning for user %d, called=%v receivedUserID=%d", resp.User.ID, walletProvisioner.called, walletProvisioner.receivedUserID)
+	}
 	if provisioner.receivedUserID != resp.User.ID || provisioner.receivedUsername != "alice" || provisioner.receivedContact != "alice@example.com" {
 		t.Fatalf("Unexpected provisioning request: userID=%d username=%q contact=%q", provisioner.receivedUserID, provisioner.receivedUsername, provisioner.receivedContact)
 	}
@@ -151,10 +201,15 @@ func TestRegister_Success(t *testing.T) {
 }
 
 func TestRegister_ProvisionsWhilePending(t *testing.T) {
-	authSvc, mockRepo, provisioner := setupTestAuthServiceWithDependencies()
+	authSvc, mockRepo, provisioner, walletProvisioner := setupTestAuthServiceWithDependencies()
 	provisioner.onProvision = func() {
 		if status := mockRepo.users["alice"].Status; status != domain.AccountStatusPending {
 			t.Errorf("Status during provisioning = %s, want %s", status, domain.AccountStatusPending)
+		}
+	}
+	walletProvisioner.onProvision = func() {
+		if status := mockRepo.users["alice"].Status; status != domain.AccountStatusPending {
+			t.Errorf("Status during wallet provisioning = %s, want %s", status, domain.AccountStatusPending)
 		}
 	}
 
@@ -167,8 +222,8 @@ func TestRegister_ProvisionsWhilePending(t *testing.T) {
 	}
 }
 
-func TestRegister_ProvisioningFailureMarksUserFailedAndReturnsNoToken(t *testing.T) {
-	authSvc, mockRepo, provisioner := setupTestAuthServiceWithDependencies()
+func TestRegister_ProfileFailureRollsBackRegistration(t *testing.T) {
+	authSvc, mockRepo, provisioner, walletProvisioner := setupTestAuthServiceWithDependencies()
 	provisioner.err = errors.New("user service unavailable")
 
 	response, err := authSvc.Register(context.Background(), domain.RegisterRequest{
@@ -181,16 +236,96 @@ func TestRegister_ProvisioningFailureMarksUserFailedAndReturnsNoToken(t *testing
 	if response != nil {
 		t.Fatalf("Expected no auth response on provisioning failure, got %+v", response)
 	}
-	if status := mockRepo.users["alice"].Status; status != domain.AccountStatusFailed {
-		t.Fatalf("Status after provisioning failure = %s, want %s", status, domain.AccountStatusFailed)
+	if _, exists := mockRepo.users["alice"]; exists {
+		t.Fatal("Expected auth user to be deleted after successful rollback")
 	}
-	if len(mockRepo.statusTransitions) != 1 || mockRepo.statusTransitions[0] != domain.AccountStatusFailed {
-		t.Fatalf("Expected one transition to FAILED, got %v", mockRepo.statusTransitions)
+	if !provisioner.deleteCalled {
+		t.Fatal("Expected possible profile to be deleted after provisioning failure")
+	}
+	if walletProvisioner.called || walletProvisioner.deleteCalled {
+		t.Fatal("Wallet must not be provisioned or deleted when profile provisioning failed")
 	}
 }
 
-func TestRegister_ActivationFailureReturnsNoTokenAndMarksUserFailed(t *testing.T) {
-	authSvc, mockRepo, _ := setupTestAuthServiceWithDependencies()
+func TestRegister_WalletFailureRollsBackWalletProfileAndUser(t *testing.T) {
+	authSvc, mockRepo, profileProvisioner, walletProvisioner := setupTestAuthServiceWithDependencies()
+	walletProvisioner.err = errors.New("wallet service unavailable")
+
+	response, err := authSvc.Register(context.Background(), domain.RegisterRequest{
+		Username: "alice",
+		Password: "securepassword123",
+	})
+	if !errors.Is(err, service.ErrWalletProvisioning) {
+		t.Fatalf("Expected ErrWalletProvisioning, got %v", err)
+	}
+	if response != nil {
+		t.Fatalf("Expected no auth response on wallet failure, got %+v", response)
+	}
+	if !walletProvisioner.deleteCalled || walletProvisioner.deletedUserID != 1 {
+		t.Fatalf("Expected possible wallet cleanup for user 1, called=%v userID=%d", walletProvisioner.deleteCalled, walletProvisioner.deletedUserID)
+	}
+	if !profileProvisioner.deleteCalled || profileProvisioner.deletedUserID != 1 {
+		t.Fatalf("Expected profile cleanup for user 1, called=%v userID=%d", profileProvisioner.deleteCalled, profileProvisioner.deletedUserID)
+	}
+	if _, exists := mockRepo.users["alice"]; exists {
+		t.Fatal("Expected auth user to be deleted after downstream cleanup")
+	}
+}
+
+func TestRegister_CanRetryFromScratchAfterSuccessfulRollback(t *testing.T) {
+	authSvc, mockRepo, _, walletProvisioner := setupTestAuthServiceWithDependencies()
+	walletProvisioner.err = errors.New("wallet service unavailable")
+
+	_, err := authSvc.Register(context.Background(), domain.RegisterRequest{
+		Username: "alice",
+		Password: "securepassword123",
+	})
+	if !errors.Is(err, service.ErrWalletProvisioning) {
+		t.Fatalf("Expected first registration to fail during wallet provisioning, got %v", err)
+	}
+	if _, exists := mockRepo.users["alice"]; exists {
+		t.Fatal("Expected failed registration identity to be removed")
+	}
+
+	walletProvisioner.err = nil
+	response, err := authSvc.Register(context.Background(), domain.RegisterRequest{
+		Username: "alice",
+		Password: "securepassword123",
+	})
+	if err != nil {
+		t.Fatalf("Expected fresh registration after rollback to succeed, got %v", err)
+	}
+	if response == nil || response.AccessToken == "" {
+		t.Fatal("Expected successful fresh registration to return a token")
+	}
+}
+
+func TestRegister_CleanupFailureKeepsFailedUser(t *testing.T) {
+	authSvc, mockRepo, profileProvisioner, walletProvisioner := setupTestAuthServiceWithDependencies()
+	walletProvisioner.err = errors.New("wallet service unavailable")
+	profileProvisioner.deleteErr = errors.New("user service unavailable during cleanup")
+
+	response, err := authSvc.Register(context.Background(), domain.RegisterRequest{
+		Username: "alice",
+		Password: "securepassword123",
+	})
+	if response != nil {
+		t.Fatalf("Expected no auth response, got %+v", response)
+	}
+	if !errors.Is(err, service.ErrWalletProvisioning) || !errors.Is(err, service.ErrRegistrationRollback) {
+		t.Fatalf("Expected provisioning and rollback errors, got %v", err)
+	}
+	user, exists := mockRepo.users["alice"]
+	if !exists || user.Status != domain.AccountStatusFailed {
+		t.Fatalf("Expected FAILED auth user to remain for cleanup retry, user=%+v", user)
+	}
+	if len(mockRepo.deletedUserIDs) != 0 {
+		t.Fatal("Auth user must not be deleted before downstream cleanup succeeds")
+	}
+}
+
+func TestRegister_ActivationFailureRollsBackRegistration(t *testing.T) {
+	authSvc, mockRepo, profileProvisioner, walletProvisioner := setupTestAuthServiceWithDependencies()
 	mockRepo.statusUpdateErrors[domain.AccountStatusActive] = errors.New("database unavailable")
 
 	response, err := authSvc.Register(context.Background(), domain.RegisterRequest{
@@ -203,11 +338,11 @@ func TestRegister_ActivationFailureReturnsNoTokenAndMarksUserFailed(t *testing.T
 	if response != nil {
 		t.Fatalf("Expected no auth response before activation, got %+v", response)
 	}
-	if status := mockRepo.users["alice"].Status; status != domain.AccountStatusFailed {
-		t.Fatalf("Status after activation failure = %s, want %s", status, domain.AccountStatusFailed)
+	if _, exists := mockRepo.users["alice"]; exists {
+		t.Fatal("Expected auth user to be deleted after activation rollback")
 	}
-	if len(mockRepo.statusTransitions) != 1 || mockRepo.statusTransitions[0] != domain.AccountStatusFailed {
-		t.Fatalf("Expected one transition to FAILED, got %v", mockRepo.statusTransitions)
+	if !walletProvisioner.deleteCalled || !profileProvisioner.deleteCalled {
+		t.Fatal("Expected wallet and profile cleanup after activation failure")
 	}
 }
 

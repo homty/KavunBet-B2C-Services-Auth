@@ -17,12 +17,14 @@ import (
 )
 
 var (
-	ErrInvalidCredentials  = errors.New("Invalid username or password")
-	ErrPasswordTooShort    = errors.New("Password must be at least 6 characters long")
-	ErrUsernameRequired    = errors.New("Username is required")
-	ErrUsernameTooShort    = errors.New("Username must be at least 3 characters long")
-	ErrUsernameTooLong     = errors.New("Username cannot exceed 50 characters")
-	ErrProfileProvisioning = errors.New("Profile provisioning failed")
+	ErrInvalidCredentials   = errors.New("Invalid username or password")
+	ErrPasswordTooShort     = errors.New("Password must be at least 6 characters long")
+	ErrUsernameRequired     = errors.New("Username is required")
+	ErrUsernameTooShort     = errors.New("Username must be at least 3 characters long")
+	ErrUsernameTooLong      = errors.New("Username cannot exceed 50 characters")
+	ErrProfileProvisioning  = errors.New("Profile provisioning failed")
+	ErrWalletProvisioning   = errors.New("Wallet provisioning failed")
+	ErrRegistrationRollback = errors.New("Registration rollback failed")
 )
 
 const (
@@ -42,18 +44,26 @@ type AuthService interface {
 
 type ProfileProvisioner interface {
 	ProvisionProfile(context.Context, int64, string, string) error
+	DeleteProfile(context.Context, int64) error
+}
+
+type WalletProvisioner interface {
+	ProvisionWallet(context.Context, int64) error
+	DeleteWallet(context.Context, int64) error
 }
 
 type authService struct {
 	userRepo           repository.UserRepository
 	profileProvisioner ProfileProvisioner
+	walletProvisioner  WalletProvisioner
 	config             *config.Config
 }
 
-func NewAuthService(userRepo repository.UserRepository, profileProvisioner ProfileProvisioner, config *config.Config) AuthService {
+func NewAuthService(userRepo repository.UserRepository, profileProvisioner ProfileProvisioner, walletProvisioner WalletProvisioner, config *config.Config) AuthService {
 	return &authService{
 		userRepo:           userRepo,
 		profileProvisioner: profileProvisioner,
+		walletProvisioner:  walletProvisioner,
 		config:             config,
 	}
 }
@@ -93,16 +103,29 @@ func (self *authService) Register(ctx context.Context, request domain.RegisterRe
 	}
 	if err != nil {
 		provisioningError := fmt.Errorf("%w: %w", ErrProfileProvisioning, err)
-		if statusError := self.markRegistrationFailed(ctx, user.ID); statusError != nil {
-			return nil, errors.Join(provisioningError, fmt.Errorf("Failed to mark registration as failed: %w", statusError))
+		if rollbackError := self.rollbackRegistration(ctx, user.ID, false); rollbackError != nil {
+			return nil, errors.Join(provisioningError, rollbackError)
+		}
+		return nil, provisioningError
+	}
+
+	if self.walletProvisioner == nil {
+		err = errors.New("wallet provisioner is not configured")
+	} else {
+		err = self.walletProvisioner.ProvisionWallet(ctx, user.ID)
+	}
+	if err != nil {
+		provisioningError := fmt.Errorf("%w: %w", ErrWalletProvisioning, err)
+		if rollbackError := self.rollbackRegistration(ctx, user.ID, true); rollbackError != nil {
+			return nil, errors.Join(provisioningError, rollbackError)
 		}
 		return nil, provisioningError
 	}
 
 	if err := self.userRepo.UpdateUserStatus(ctx, user.ID, domain.AccountStatusActive); err != nil {
 		activationError := fmt.Errorf("Failed to activate user: %w", err)
-		if statusError := self.markRegistrationFailed(ctx, user.ID); statusError != nil {
-			return nil, errors.Join(activationError, fmt.Errorf("Failed to mark registration as failed: %w", statusError))
+		if rollbackError := self.rollbackRegistration(ctx, user.ID, true); rollbackError != nil {
+			return nil, errors.Join(activationError, rollbackError)
 		}
 		return nil, activationError
 	}
@@ -110,7 +133,11 @@ func (self *authService) Register(ctx context.Context, request domain.RegisterRe
 
 	token, expiresIn, err := self.generateJWT(user.ID)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to generate token: %w", err)
+		tokenError := fmt.Errorf("Failed to generate token: %w", err)
+		if rollbackError := self.rollbackRegistration(ctx, user.ID, true); rollbackError != nil {
+			return nil, errors.Join(tokenError, rollbackError)
+		}
+		return nil, tokenError
 	}
 
 	return &domain.AuthResponse{
@@ -125,10 +152,44 @@ func (self *authService) Register(ctx context.Context, request domain.RegisterRe
 	}, nil
 }
 
-func (self *authService) markRegistrationFailed(ctx context.Context, userID int64) error {
-	statusContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+func (self *authService) rollbackRegistration(ctx context.Context, userID int64, cleanupWallet bool) error {
+	cleanupContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	return self.userRepo.UpdateUserStatus(statusContext, userID, domain.AccountStatusFailed)
+
+	var rollbackErrors []error
+	if err := self.userRepo.UpdateUserStatus(cleanupContext, userID, domain.AccountStatusFailed); err != nil {
+		rollbackErrors = append(rollbackErrors, fmt.Errorf("mark user failed: %w", err))
+	}
+
+	downstreamCleanupSucceeded := true
+	if cleanupWallet {
+		if self.walletProvisioner == nil {
+			downstreamCleanupSucceeded = false
+			rollbackErrors = append(rollbackErrors, errors.New("wallet provisioner is not configured"))
+		} else if err := self.walletProvisioner.DeleteWallet(cleanupContext, userID); err != nil {
+			downstreamCleanupSucceeded = false
+			rollbackErrors = append(rollbackErrors, fmt.Errorf("delete wallet: %w", err))
+		}
+	}
+
+	if self.profileProvisioner == nil {
+		downstreamCleanupSucceeded = false
+		rollbackErrors = append(rollbackErrors, errors.New("profile provisioner is not configured"))
+	} else if err := self.profileProvisioner.DeleteProfile(cleanupContext, userID); err != nil {
+		downstreamCleanupSucceeded = false
+		rollbackErrors = append(rollbackErrors, fmt.Errorf("delete profile: %w", err))
+	}
+
+	if downstreamCleanupSucceeded {
+		if err := self.userRepo.DeleteUser(cleanupContext, userID); err != nil {
+			rollbackErrors = append(rollbackErrors, fmt.Errorf("delete auth user: %w", err))
+		}
+	}
+
+	if len(rollbackErrors) > 0 {
+		return fmt.Errorf("%w: %w", ErrRegistrationRollback, errors.Join(rollbackErrors...))
+	}
+	return nil
 }
 
 func (self *authService) Login(context context.Context, request domain.LoginRequest) (*domain.AuthResponse, error) {

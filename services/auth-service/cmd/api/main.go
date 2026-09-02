@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"betwin/auth-service/internal/client"
@@ -14,9 +18,9 @@ import (
 	"betwin/auth-service/internal/repository"
 	"betwin/auth-service/internal/service"
 	userv1 "betwin/pkg/proto/user/v1"
+	walletv1 "betwin/pkg/proto/wallet/v1"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/quic-go/quic-go/http3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -46,44 +50,68 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to configure user service gRPC client: %v", err)
 	}
-	defer userServiceConnection.Close()
+
+	walletServiceConnection, err := grpc.NewClient(
+		cfg.WalletServiceGRPCAddress,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		_ = userServiceConnection.Close()
+		log.Fatalf("Failed to configure wallet service gRPC client: %v", err)
+	}
 
 	//Initialize layers (Dependency Injection)
 	userRepo := repository.NewUserRepository(pool)
 	profileProvisioner := client.NewUserProfileProvisioner(userv1.NewUserServiceClient(userServiceConnection))
-	authSvc := service.NewAuthService(userRepo, profileProvisioner, cfg)
+	walletProvisioner := client.NewUserWalletProvisioner(walletv1.NewWalletServiceClient(walletServiceConnection))
+	authSvc := service.NewAuthService(userRepo, profileProvisioner, walletProvisioner, cfg)
 	authHandler := handler.NewAuthHandler(authSvc)
 
-	//Router & HTTP/3 Alt-Svc middleware
-	r := chi.NewRouter()
+	router := chi.NewRouter()
+	authHandler.RegisterRoutes(router)
 
-	serverAddr := fmt.Sprintf(":%s", cfg.Port)
-	h3Server := &http3.Server{
-		Addr:    serverAddr,
-		Handler: r,
+	serverAddress := fmt.Sprintf(":%s", cfg.HTTPPort)
+	httpServer := &http.Server{
+		Addr:              serverAddress,
+		Handler:           router,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	//Alt-Svc header notifies clients that HTTP/3 over QUIC/UDP is available on port
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			_ = h3Server.SetQUICHeaders(w.Header())
-			next.ServeHTTP(w, req)
-		})
-	})
-
-	authHandler.RegisterRoutes(r)
-
-	log.Printf("Auth Service running on HTTP/3 (QUIC/UDP) & HTTP/2 (TCP) at https://localhost%s\n", serverAddr)
-
-	//HTTP/3 Server over UDP in background goroutine
+	serverErrors := make(chan error, 1)
 	go func() {
-		if err := h3Server.ListenAndServeTLS("server.crt", "server.key"); err != nil {
-			log.Printf("HTTP/3 QUIC server error: %v\n", err)
+		log.Printf("Auth HTTP server is running on http://localhost%s", serverAddress)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErrors <- fmt.Errorf("HTTP server stopped unexpectedly: %w", err)
 		}
 	}()
 
-	//HTTP/2 & HTTP/1.1 fallback server over TCP
-	if err := http.ListenAndServeTLS(serverAddr, "server.crt", "server.key", r); err != nil {
-		log.Fatalf("HTTP/2 server stopped unexpectedly: %v", err)
+	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+
+	select {
+	case <-shutdownSignal.Done():
+		log.Println("Shutdown signal received")
+	case err := <-serverErrors:
+		log.Printf("Server error: %v", err)
 	}
+
+	stopSignals()
+	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+
+	if err := httpServer.Shutdown(shutdownContext); err != nil {
+		log.Printf("HTTP graceful shutdown failed: %v", err)
+		if closeErr := httpServer.Close(); closeErr != nil {
+			log.Printf("HTTP forced shutdown failed: %v", closeErr)
+		}
+	}
+
+	if err := userServiceConnection.Close(); err != nil {
+		log.Printf("Failed to close user-service gRPC connection: %v", err)
+	}
+	if err := walletServiceConnection.Close(); err != nil {
+		log.Printf("Failed to close wallet-service gRPC connection: %v", err)
+	}
+
+	log.Println("Auth service stopped")
 }

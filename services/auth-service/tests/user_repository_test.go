@@ -123,3 +123,23 @@ func TestGetUserByID(t *testing.T) {
 		t.Errorf("Expected ErrUserNotFound, got %v", err)
 	}
 }
+
+func TestDeleteUser_Idempotent(t *testing.T) {
+	repo := setupTestDB(t)
+	ctx := context.Background()
+	username := fmt.Sprintf("delete_user_%d", time.Now().UnixNano())
+
+	user, err := repo.CreatePendingUser(ctx, username, "hash")
+	if err != nil {
+		t.Fatalf("create pending user: %v", err)
+	}
+	if err := repo.DeleteUser(ctx, user.ID); err != nil {
+		t.Fatalf("first deletion failed: %v", err)
+	}
+	if err := repo.DeleteUser(ctx, user.ID); err != nil {
+		t.Fatalf("repeated deletion failed: %v", err)
+	}
+	if _, err := repo.GetUserByID(ctx, user.ID); !errors.Is(err, repository.ErrUserNotFound) {
+		t.Fatalf("expected user not found after deletion, got %v", err)
+	}
+}
