@@ -36,6 +36,15 @@ func (m *MockWalletRepository) ProvisionWallet(ctx context.Context, userID int64
 	return wallet, nil
 }
 
+func (m *MockWalletRepository) DeleteWallet(_ context.Context, userID int64) error {
+	for walletID, wallet := range m.wallets {
+		if wallet.UserID == userID {
+			delete(m.wallets, walletID)
+		}
+	}
+	return nil
+}
+
 func (m *MockWalletRepository) GetWalletByUserID(ctx context.Context, userID int64) (*domain.UserWallet, error) {
 	for _, w := range m.wallets {
 		if w.UserID == userID {
@@ -155,5 +164,22 @@ func TestProvisionWallet_Idempotent(t *testing.T) {
 	}
 	if second.Balance != 1000 {
 		t.Fatalf("Expected starting balance to remain 1000, got %d", second.Balance)
+	}
+}
+
+func TestDeleteWallet_Idempotent(t *testing.T) {
+	svc, mockRepo := setupTestWalletService()
+	if _, err := svc.ProvisionWallet(context.Background(), 52); err != nil {
+		t.Fatalf("provision wallet: %v", err)
+	}
+
+	if err := svc.DeleteWallet(context.Background(), 52); err != nil {
+		t.Fatalf("first deletion failed: %v", err)
+	}
+	if err := svc.DeleteWallet(context.Background(), 52); err != nil {
+		t.Fatalf("repeated deletion failed: %v", err)
+	}
+	if _, err := mockRepo.GetWalletByUserID(context.Background(), 52); !errors.Is(err, repository.ErrWalletNotFound) {
+		t.Fatalf("expected wallet not found after deletion, got %v", err)
 	}
 }

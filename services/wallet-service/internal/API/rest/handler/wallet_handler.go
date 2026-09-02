@@ -2,7 +2,7 @@ package handler
 
 import (
 	"betwin/pkg/middleware"
-	"betwin/pkg/response"
+	"betwin/wallet-service/internal/API/rest/response"
 	"betwin/wallet-service/internal/repository"
 	"betwin/wallet-service/internal/service"
 	"errors"

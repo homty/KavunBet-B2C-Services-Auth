@@ -18,14 +18,22 @@ var (
 
 type WalletRepository interface {
 	ProvisionWallet(context context.Context, userID int64) (*domain.UserWallet, error)
+	DeleteWallet(context context.Context, userID int64) error
 	GetWalletByUserID(context context.Context, userID int64) (*domain.UserWallet, error)
 	GetWalletByID(context context.Context, walletID int64) (*domain.UserWallet, error)
 	ClaimDailyReward(context context.Context, userID int64, rewardAmount int64) (*domain.UserWallet, error)
 }
 
+func (repository *postgresWalletRepository) DeleteWallet(context context.Context, userID int64) error {
+	if _, err := repository.pool.Exec(context, `DELETE FROM wallet_service.wallets WHERE user_id = $1;`, userID); err != nil {
+		return fmt.Errorf("failed to delete wallet: %w", err)
+	}
+	return nil
+}
+
 func (repository *postgresWalletRepository) ProvisionWallet(context context.Context, userID int64) (*domain.UserWallet, error) {
 	query := `
-		INSERT INTO user_wallets (user_id)
+		INSERT INTO wallet_service.wallets (user_id)
 		VALUES ($1)
 		ON CONFLICT (user_id) DO NOTHING;
 	`
@@ -47,7 +55,7 @@ func NewWalletRepository(pool *pgxpool.Pool) WalletRepository {
 func (repository *postgresWalletRepository) GetWalletByUserID(context context.Context, userID int64) (*domain.UserWallet, error) {
 	query := `
 		SELECT id, user_id, coin_balance, last_daily_claim, updated_at
-		FROM user_wallets
+		FROM wallet_service.wallets
 		WHERE user_id = $1;
 	`
 
@@ -73,7 +81,7 @@ func (repository *postgresWalletRepository) GetWalletByUserID(context context.Co
 func (repository *postgresWalletRepository) GetWalletByID(context context.Context, walletID int64) (*domain.UserWallet, error) {
 	query := `
 		SELECT id, user_id, coin_balance, last_daily_claim, updated_at
-		FROM user_wallets
+		FROM wallet_service.wallets
 		WHERE id = $1;
 	`
 
@@ -109,7 +117,7 @@ func (repository *postgresWalletRepository) ClaimDailyReward(context context.Con
 
 	lockQuery := `
 		SELECT id, user_id, coin_balance, last_daily_claim, updated_at
-		FROM user_wallets
+		FROM wallet_service.wallets
 		WHERE user_id = $1
 		FOR UPDATE;
 	`
@@ -135,7 +143,7 @@ func (repository *postgresWalletRepository) ClaimDailyReward(context context.Con
 	}
 
 	updatedQuery := `
-		UPDATE user_wallets
+		UPDATE wallet_service.wallets
 		SET coin_balance = coin_balance + $1,
 			last_daily_claim = CURRENT_TIMESTAMP,
 			updated_at = CURRENT_TIMESTAMP

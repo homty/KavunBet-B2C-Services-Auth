@@ -11,12 +11,17 @@ import (
 
 type WalletService interface {
 	ProvisionWallet(ctx context.Context, userID int64) (*domain.UserWallet, error)
+	DeleteWallet(ctx context.Context, userID int64) error
 	GetBalance(ctx context.Context, userID int64) (*domain.WalletBalanceResponse, error)
 	ClaimDaily(ctx context.Context, userID int64) (*domain.DailyClaimResponse, error)
 }
 
 func (s *walletService) ProvisionWallet(ctx context.Context, userID int64) (*domain.UserWallet, error) {
 	return s.walletRepository.ProvisionWallet(ctx, userID)
+}
+
+func (s *walletService) DeleteWallet(ctx context.Context, userID int64) error {
+	return s.walletRepository.DeleteWallet(ctx, userID)
 }
 
 type walletService struct {

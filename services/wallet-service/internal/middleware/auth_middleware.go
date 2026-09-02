@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"betwin/wallet-service/internal/response"
+	"betwin/wallet-service/internal/API/rest/response"
 
 	"github.com/golang-jwt/jwt/v5"
 )

@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -26,29 +25,25 @@ func setupTestWalletDB(t *testing.T, createWallet bool) (repository.WalletReposi
 		t.Fatalf("Failed to connect to PostgreSQL: %v", err)
 	}
 
-	// Create test user in users & user_wallets
-	uniqueUsername := fmt.Sprintf("testuser_wallet_%d", time.Now().UnixNano())
-	var userID int64
-	err = pool.QueryRow(ctx, "INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id", uniqueUsername, "hash").Scan(&userID)
-	if err != nil {
-		t.Fatalf("Failed to insert test user into users table: %v", err)
-	}
+	// A wallet stores the auth-service ID as external data. The wallet-service
+	// test must not create or query an auth-service row.
+	userID := time.Now().UnixNano()
+	repo := repository.NewWalletRepository(pool)
 
 	if createWallet {
-		_, err = pool.Exec(ctx, "INSERT INTO user_wallets (user_id, coin_balance) VALUES ($1, 1000)", userID)
-		if err != nil {
-			t.Fatalf("Failed to insert test user_wallet: %v", err)
+		if _, err := repo.ProvisionWallet(ctx, userID); err != nil {
+			t.Fatalf("Failed to provision test wallet: %v", err)
 		}
 	}
 
 	// Cleanup on test exit
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
-		_, _ = pool.Exec(cleanupCtx, "DELETE FROM users WHERE id = $1", userID)
+		_ = repo.DeleteWallet(cleanupCtx, userID)
 		pool.Close()
 	})
 
-	return repository.NewWalletRepository(pool), userID
+	return repo, userID
 }
 
 func TestWalletRepository_GetAndClaim(t *testing.T) {
@@ -120,5 +115,20 @@ func TestWalletRepository_ProvisionIdempotent(t *testing.T) {
 	}
 	if second.Balance != 1000 {
 		t.Fatalf("Expected starting balance to remain 1000, got %d", second.Balance)
+	}
+}
+
+func TestWalletRepository_DeleteIdempotent(t *testing.T) {
+	repo, userID := setupTestWalletDB(t, true)
+	ctx := context.Background()
+
+	if err := repo.DeleteWallet(ctx, userID); err != nil {
+		t.Fatalf("first deletion failed: %v", err)
+	}
+	if err := repo.DeleteWallet(ctx, userID); err != nil {
+		t.Fatalf("repeated deletion failed: %v", err)
+	}
+	if _, err := repo.GetWalletByUserID(ctx, userID); !errors.Is(err, repository.ErrWalletNotFound) {
+		t.Fatalf("expected wallet not found after deletion, got %v", err)
 	}
 }
