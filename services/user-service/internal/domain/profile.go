@@ -2,7 +2,7 @@ package domain
 
 import "time"
 
-// UserProfile represents full profile metadata stored in `user_profiles`
+// UserProfile represents full profile metadata stored in user_service.profiles.
 type UserProfile struct {
 	UserID      int64     `json:"user_id"`
 	Username    string    `json:"username"`

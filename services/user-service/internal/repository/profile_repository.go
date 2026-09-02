@@ -15,9 +15,17 @@ var ErrProfileNotFound = errors.New("Profile Not Found")
 
 type ProfileRepository interface {
 	ProvisionProfile(context context.Context, userID int64, username string, contactInfo string) (*domain.UserProfile, error)
+	DeleteProfile(context context.Context, userID int64) error
 	GetProfileByUserID(context context.Context, userID int64) (*domain.UserProfile, error)
 	UpdateProfile(context context.Context, userID int64, request domain.UpdateProfileRequest) (*domain.UserProfile, error)
 	GetPublicProfileByID(context context.Context, userID int64) (*domain.PublicProfileResponse, error)
+}
+
+func (repository *postgresProfileRepository) DeleteProfile(context context.Context, userID int64) error {
+	if _, err := repository.pool.Exec(context, `DELETE FROM user_service.profiles WHERE user_id = $1;`, userID); err != nil {
+		return fmt.Errorf("failed to delete user profile: %w", err)
+	}
+	return nil
 }
 
 func (repository *postgresProfileRepository) ProvisionProfile(context context.Context, userID int64, username string, contactInfo string) (*domain.UserProfile, error) {
@@ -27,7 +35,7 @@ func (repository *postgresProfileRepository) ProvisionProfile(context context.Co
 	}
 
 	query := `
-		INSERT INTO user_profiles (user_id, username, contact_info)
+		INSERT INTO user_service.profiles (user_id, username, contact_info)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (user_id) DO NOTHING;
 	`
@@ -49,7 +57,7 @@ func NewProfileRepository(pool *pgxpool.Pool) ProfileRepository {
 func (repository *postgresProfileRepository) GetProfileByUserID(context context.Context, userID int64) (*domain.UserProfile, error) {
 	query := `
 		SELECT user_id, username, contact_info, display_name, bio, avatar_url, updated_at
-		FROM user_profiles
+		FROM user_service.profiles
 		WHERE user_id = $1;
 	`
 
@@ -95,7 +103,7 @@ func (repository *postgresProfileRepository) UpdateProfile(context context.Conte
 	}
 
 	query := `
-		UPDATE user_profiles
+		UPDATE user_service.profiles
 		SET contact_info = $1, display_name = $2, bio = $3, avatar_url = $4, updated_at = CURRENT_TIMESTAMP
 		WHERE user_id = $5
 		RETURNING user_id, username, contact_info, display_name, bio, avatar_url, updated_at;
@@ -129,7 +137,7 @@ func (repository *postgresProfileRepository) UpdateProfile(context context.Conte
 func (repository *postgresProfileRepository) GetPublicProfileByID(context context.Context, userID int64) (*domain.PublicProfileResponse, error) {
 	query := `
 		SELECT user_id, username, display_name, bio, avatar_url
-		FROM user_profiles
+		FROM user_service.profiles
 		WHERE user_id = $1
 	`
 

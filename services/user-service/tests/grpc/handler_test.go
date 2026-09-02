@@ -22,6 +22,7 @@ import (
 
 type userServiceStub struct {
 	provisionProfile func(context.Context, int64, string, string) (*domain.UserProfile, error)
+	deleteProfile    func(context.Context, int64) error
 	getPublicProfile func(context.Context, int64) (*domain.PublicProfileResponse, error)
 }
 
@@ -32,6 +33,13 @@ func (stub *userServiceStub) ProvisionProfile(ctx context.Context, userID int64,
 		panic("unexpected ProvisionProfile call")
 	}
 	return stub.provisionProfile(ctx, userID, username, contactInfo)
+}
+
+func (stub *userServiceStub) DeleteProfile(ctx context.Context, userID int64) error {
+	if stub.deleteProfile == nil {
+		panic("unexpected DeleteProfile call")
+	}
+	return stub.deleteProfile(ctx, userID)
 }
 
 func (stub *userServiceStub) GetMyProfile(context.Context, int64) (*domain.UserProfile, error) {
@@ -239,6 +247,32 @@ func TestGetPublicProfileHidesInternalServiceError(t *testing.T) {
 
 	_, err := client.GetPublicProfile(context.Background(), &userv1.GetPublicProfileRequest{TargetUserId: 42})
 	assertGRPCError(t, err, codes.Internal, "internal server error")
+}
+
+func TestDeleteProfileCallsService(t *testing.T) {
+	deletedUserID := int64(0)
+	client := newUserServiceClient(t, &userServiceStub{
+		deleteProfile: func(_ context.Context, userID int64) error {
+			deletedUserID = userID
+			return nil
+		},
+	})
+
+	_, err := client.DeleteProfile(context.Background(), &userv1.DeleteProfileRequest{UserId: 42})
+	if err != nil {
+		t.Fatalf("DeleteProfile returned an error: %v", err)
+	}
+	if deletedUserID != 42 {
+		t.Fatalf("deleted user ID = %d, want 42", deletedUserID)
+	}
+}
+
+func TestDeleteProfileRejectsInvalidRequest(t *testing.T) {
+	handler := usergrpc.NewUserGRPCHandler(&userServiceStub{})
+	for _, request := range []*userv1.DeleteProfileRequest{nil, {}} {
+		_, err := handler.DeleteProfile(context.Background(), request)
+		assertGRPCError(t, err, codes.InvalidArgument, map[bool]string{true: "request is required", false: "user_id must be greater than zero"}[request == nil])
+	}
 }
 
 func assertGRPCError(t *testing.T, err error, code codes.Code, message string) {

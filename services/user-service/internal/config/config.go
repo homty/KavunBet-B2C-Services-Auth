@@ -9,7 +9,8 @@ import (
 )
 
 type Config struct {
-	Port         string
+	HTTPPort     string
+	GRPCPort     string
 	DatabaseURL  string
 	JWTSecret    string
 	AccessJWTTTL time.Duration
@@ -23,9 +24,13 @@ func Load() (*Config, error) {
 		}
 	}
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8081"
+	httpPort := os.Getenv("HTTP_PORT")
+	if httpPort == "" {
+		httpPort = "8082"
+	}
+	grpcPort := os.Getenv("GRPC_PORT")
+	if grpcPort == "" {
+		grpcPort = "50051"
 	}
 
 	databaseURL := os.Getenv("DATABASE_URL")
@@ -38,7 +43,8 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Port:         port,
+		HTTPPort:     httpPort,
+		GRPCPort:     grpcPort,
 		DatabaseURL:  databaseURL,
 		JWTSecret:    jwtSecret,
 		AccessJWTTTL: 15 * time.Minute,

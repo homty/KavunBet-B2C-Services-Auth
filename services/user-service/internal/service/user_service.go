@@ -16,9 +16,14 @@ var (
 
 type UserService interface {
 	ProvisionProfile(context context.Context, userID int64, username string, contactInfo string) (*domain.UserProfile, error)
+	DeleteProfile(context context.Context, userID int64) error
 	GetMyProfile(context context.Context, userID int64) (*domain.UserProfile, error)
 	UpdateMyProfile(context context.Context, userID int64, request domain.UpdateProfileRequest) (*domain.UserProfile, error)
 	GetPublicProfile(context context.Context, targetUserID int64) (*domain.PublicProfileResponse, error)
+}
+
+func (self *userService) DeleteProfile(context context.Context, userID int64) error {
+	return self.profileRepository.DeleteProfile(context, userID)
 }
 
 func (self *userService) ProvisionProfile(context context.Context, userID int64, username string, contactInfo string) (*domain.UserProfile, error) {

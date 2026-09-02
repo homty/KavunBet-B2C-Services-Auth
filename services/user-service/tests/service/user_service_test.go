@@ -43,6 +43,11 @@ func (m *MockProfileRepository) ProvisionProfile(ctx context.Context, userID int
 	return profile, nil
 }
 
+func (m *MockProfileRepository) DeleteProfile(_ context.Context, userID int64) error {
+	delete(m.profiles, userID)
+	return nil
+}
+
 func (m *MockProfileRepository) GetProfileByUserID(ctx context.Context, userID int64) (*domain.UserProfile, error) {
 	profile, exists := m.profiles[userID]
 	if !exists {
@@ -158,6 +163,23 @@ func TestProvisionProfile_Idempotent(t *testing.T) {
 	}
 	if second.ContactInfo == nil || *second.ContactInfo != "alice@example.com" {
 		t.Fatalf("Repeated provisioning overwrote profile data: %v", second.ContactInfo)
+	}
+}
+
+func TestDeleteProfile_Idempotent(t *testing.T) {
+	svc, mockRepo := setupTestUserService()
+	if _, err := svc.ProvisionProfile(context.Background(), 52, "alice", ""); err != nil {
+		t.Fatalf("provision profile: %v", err)
+	}
+
+	if err := svc.DeleteProfile(context.Background(), 52); err != nil {
+		t.Fatalf("first deletion failed: %v", err)
+	}
+	if err := svc.DeleteProfile(context.Background(), 52); err != nil {
+		t.Fatalf("repeated deletion failed: %v", err)
+	}
+	if _, exists := mockRepo.profiles[52]; exists {
+		t.Fatal("profile still exists after deletion")
 	}
 }
 

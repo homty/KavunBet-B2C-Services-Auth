@@ -2,34 +2,37 @@ package main
 
 import (
 	userv1 "betwin/pkg/proto/user/v1"
-	user_gRPC "betwin/user-service/internal/API/grpc"
-	"betwin/user-service/internal/API/rest/handler"
+	usergrpc "betwin/user-service/internal/API/grpc"
+	userrest "betwin/user-service/internal/API/rest/handler"
 	"betwin/user-service/internal/config"
 	"betwin/user-service/internal/database"
 	"betwin/user-service/internal/repository"
 	"betwin/user-service/internal/service"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/quic-go/quic-go/http3"
 	grpc "google.golang.org/grpc"
 )
 
 func main() {
-	config, err := config.Load()
+	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	context, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	connectionContext, cancelConnection := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelConnection()
 
-	pool, err := database.NewPostgresPool(context, config.DatabaseURL)
+	pool, err := database.NewPostgresPool(connectionContext, cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to DB pool: %v", err)
 	}
@@ -39,48 +42,80 @@ func main() {
 	profileRepo := repository.NewProfileRepository(pool)
 	userService := service.NewUserService(profileRepo)
 
-	grpcPort := ":50051"
-	grpcListener, err := net.Listen("tcp", grpcPort)
+	grpcAddress := ":" + cfg.GRPCPort
+	grpcListener, err := net.Listen("tcp", grpcAddress)
 	if err != nil {
-		log.Fatalf("Failed to listen for gRPC on %s: %v", grpcPort, err)
+		log.Fatalf("Failed to listen for gRPC on %s: %v", grpcAddress, err)
 	}
+	defer grpcListener.Close()
+
 	grpcServer := grpc.NewServer()
-	userGrpcHandler := user_gRPC.NewUserGRPCHandler(userService)
+	userGrpcHandler := usergrpc.NewUserGRPCHandler(userService)
 	userv1.RegisterUserServiceServer(grpcServer, userGrpcHandler)
 
-	go func() {
-		log.Printf("gRPC server is running in parallel on tcp://localhost%s\n", grpcPort)
-		if err := grpcServer.Serve(grpcListener); err != nil {
-			log.Fatalf("gRPC server stopped unexpectedly: %v", err)
-		}
-	}()
+	userHTTPHandler := userrest.NewUserHandler(userService, cfg.JWTSecret)
 
-	userHandler := handler.NewUserHandler(userService, config.JWTSecret)
 	router := chi.NewRouter()
+	userHTTPHandler.RegisterRoutes(router)
 
-	serverAddress := fmt.Sprintf(":%s", config.Port)
-	h3Server := &http3.Server{
-		Addr:    serverAddress,
-		Handler: router,
+	httpAddress := fmt.Sprintf(":%s", cfg.HTTPPort)
+	httpServer := &http.Server{
+		Addr:              httpAddress,
+		Handler:           router,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	router.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			_ = h3Server.SetQUICHeaders(writer.Header())
-			next.ServeHTTP(writer, request)
-		})
-	})
-
-	userHandler.RegisterRoutes(router)
-	log.Printf("User service running on HTTP/3 (QUIC/UDP) & HTTP/2 (TCP) at https://localhost%s\n", serverAddress)
+	serverErrors := make(chan error, 2)
 
 	go func() {
-		if err := h3Server.ListenAndServeTLS("server.crt", "server.key"); err != nil {
-			log.Printf("HTTP/3 QUIC server error: %v\n", err)
+		log.Printf("gRPC server is running on tcp://localhost%s", grpcAddress)
+		if err := grpcServer.Serve(grpcListener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			serverErrors <- fmt.Errorf("gRPC server stopped unexpectedly: %w", err)
 		}
 	}()
 
-	if err := http.ListenAndServeTLS(serverAddress, "server.crt", "server.key", router); err != nil {
-		log.Fatalf("HTTP/v2 server stopped unexpectedly: %v", err)
+	go func() {
+		log.Printf("HTTP server is running on http://localhost%s", httpAddress)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErrors <- fmt.Errorf("HTTP server stopped unexpectedly: %w", err)
+		}
+	}()
+
+	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+
+	select {
+	case <-shutdownSignal.Done():
+		log.Println("Shutdown signal received")
+	case err := <-serverErrors:
+		log.Printf("Server error: %v", err)
 	}
+
+	stopSignals()
+	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+
+	if err := httpServer.Shutdown(shutdownContext); err != nil {
+		log.Printf("HTTP graceful shutdown failed: %v", err)
+		if closeErr := httpServer.Close(); closeErr != nil {
+			log.Printf("HTTP forced shutdown failed: %v", closeErr)
+		}
+	}
+
+	grpcStopped := make(chan struct{})
+	go func() {
+		grpcServer.GracefulStop()
+		close(grpcStopped)
+	}()
+
+	select {
+	case <-grpcStopped:
+		log.Println("gRPC server stopped gracefully")
+	case <-shutdownContext.Done():
+		log.Println("gRPC graceful shutdown timed out; forcing stop")
+		grpcServer.Stop()
+		<-grpcStopped
+	}
+
+	log.Println("User service stopped")
 }

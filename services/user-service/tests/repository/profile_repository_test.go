@@ -27,14 +27,10 @@ func setupTestDB(t *testing.T) (repository.ProfileRepository, int64) {
 		t.Fatalf("Failed to connect to PostgreSQL: %v", err)
 	}
 
-	// Create test user in users & user_profiles
+	// A profile stores the auth-service ID as external data. The user-service
+	// test must not create or query an auth-service row.
 	uniqueUsername := fmt.Sprintf("testuser_user_svc_%d", time.Now().UnixNano())
-	var userID int64
-	err = pool.QueryRow(ctx, "INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id", uniqueUsername, "hash").Scan(&userID)
-	if err != nil {
-		t.Fatalf("Failed to insert test user into users table: %v", err)
-	}
-
+	userID := time.Now().UnixNano()
 	repo := repository.NewProfileRepository(pool)
 	if _, err := repo.ProvisionProfile(ctx, userID, uniqueUsername, "repo_test@example.com"); err != nil {
 		t.Fatalf("Failed to provision test user profile: %v", err)
@@ -43,7 +39,7 @@ func setupTestDB(t *testing.T) (repository.ProfileRepository, int64) {
 	// Cleanup on test exit
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
-		_, _ = pool.Exec(cleanupCtx, "DELETE FROM users WHERE id = $1", userID)
+		_ = repo.DeleteProfile(cleanupCtx, userID)
 		pool.Close()
 	})
 
@@ -95,7 +91,7 @@ func TestProfileRepository_GetAndUpdate(t *testing.T) {
 		t.Errorf("Expected UserID %d, got %d", userID, pub.UserID)
 	}
 	if pub.Username == "" {
-		t.Fatal("Expected public profile username to come from user_profiles")
+		t.Fatal("Expected public profile username to come from user_service.profiles")
 	}
 	if pub.DisplayName == nil || *pub.DisplayName != "Master Predictor" {
 		t.Errorf("Expected DisplayName 'Master Predictor', got %v", pub.DisplayName)
@@ -121,5 +117,20 @@ func TestProfileRepository_NotFound(t *testing.T) {
 	_, err := repo.GetProfileByUserID(ctx, 99999999)
 	if !errors.Is(err, repository.ErrProfileNotFound) {
 		t.Errorf("Expected ErrProfileNotFound for non-existent ID, got %v", err)
+	}
+}
+
+func TestProfileRepository_DeleteIdempotent(t *testing.T) {
+	repo, userID := setupTestDB(t)
+	ctx := context.Background()
+
+	if err := repo.DeleteProfile(ctx, userID); err != nil {
+		t.Fatalf("first deletion failed: %v", err)
+	}
+	if err := repo.DeleteProfile(ctx, userID); err != nil {
+		t.Fatalf("repeated deletion failed: %v", err)
+	}
+	if _, err := repo.GetProfileByUserID(ctx, userID); !errors.Is(err, repository.ErrProfileNotFound) {
+		t.Fatalf("expected profile not found after deletion, got %v", err)
 	}
 }

@@ -31,6 +31,10 @@ func (spy *userServiceSpy) ProvisionProfile(context.Context, int64, string, stri
 	panic("unexpected ProvisionProfile call")
 }
 
+func (spy *userServiceSpy) DeleteProfile(context.Context, int64) error {
+	panic("unexpected DeleteProfile call")
+}
+
 func (spy *userServiceSpy) UpdateMyProfile(context context.Context, userID int64, request domain.UpdateProfileRequest) (*domain.UserProfile, error) {
 	spy.updateCalled = true
 	spy.receivedUserID = userID

@@ -74,3 +74,18 @@ func (handler *UserGRPCHandler) GetPublicProfile(ctx context.Context, request *u
 
 	return response, nil
 }
+
+func (handler *UserGRPCHandler) DeleteProfile(ctx context.Context, request *userv1.DeleteProfileRequest) (*userv1.DeleteProfileResponse, error) {
+	if request == nil {
+		return nil, grpcresponse.InvalidArgument("request is required")
+	}
+	if request.GetUserId() <= 0 {
+		return nil, grpcresponse.InvalidArgument("user_id must be greater than zero")
+	}
+
+	if err := handler.userService.DeleteProfile(ctx, request.GetUserId()); err != nil {
+		return nil, grpcresponse.FromError(err)
+	}
+
+	return &userv1.DeleteProfileResponse{}, nil
+}
