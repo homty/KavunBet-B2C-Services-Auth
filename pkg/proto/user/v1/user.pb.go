@@ -253,6 +253,86 @@ func (x *GetPublicProfileResponse) GetBio() string {
 	return ""
 }
 
+type DeleteProfileRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        int64                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteProfileRequest) Reset() {
+	*x = DeleteProfileRequest{}
+	mi := &file_pkg_proto_user_v1_user_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteProfileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteProfileRequest) ProtoMessage() {}
+
+func (x *DeleteProfileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_proto_user_v1_user_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteProfileRequest.ProtoReflect.Descriptor instead.
+func (*DeleteProfileRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_proto_user_v1_user_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *DeleteProfileRequest) GetUserId() int64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+type DeleteProfileResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteProfileResponse) Reset() {
+	*x = DeleteProfileResponse{}
+	mi := &file_pkg_proto_user_v1_user_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteProfileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteProfileResponse) ProtoMessage() {}
+
+func (x *DeleteProfileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_proto_user_v1_user_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteProfileResponse.ProtoReflect.Descriptor instead.
+func (*DeleteProfileResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_proto_user_v1_user_proto_rawDescGZIP(), []int{5}
+}
+
 var File_pkg_proto_user_v1_user_proto protoreflect.FileDescriptor
 
 const file_pkg_proto_user_v1_user_proto_rawDesc = "" +
@@ -273,10 +353,14 @@ const file_pkg_proto_user_v1_user_proto_rawDesc = "" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x1d\n" +
 	"\n" +
 	"avatar_url\x18\x04 \x01(\tR\tavatarUrl\x12\x10\n" +
-	"\x03bio\x18\x05 \x01(\tR\x03bio2\xdb\x01\n" +
+	"\x03bio\x18\x05 \x01(\tR\x03bio\"/\n" +
+	"\x14DeleteProfileRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\x03R\x06userId\"\x17\n" +
+	"\x15DeleteProfileResponse2\xb9\x02\n" +
 	"\vUserService\x12e\n" +
 	"\x10ProvisionProfile\x12'.betwin.user.v1.ProvisionProfileRequest\x1a(.betwin.user.v1.ProvisionProfileResponse\x12e\n" +
-	"\x10GetPublicProfile\x12'.betwin.user.v1.GetPublicProfileRequest\x1a(.betwin.user.v1.GetPublicProfileResponseB!Z\x1fbetwin/pkg/proto/user/v1;userv1b\x06proto3"
+	"\x10GetPublicProfile\x12'.betwin.user.v1.GetPublicProfileRequest\x1a(.betwin.user.v1.GetPublicProfileResponse\x12\\\n" +
+	"\rDeleteProfile\x12$.betwin.user.v1.DeleteProfileRequest\x1a%.betwin.user.v1.DeleteProfileResponseB!Z\x1fbetwin/pkg/proto/user/v1;userv1b\x06proto3"
 
 var (
 	file_pkg_proto_user_v1_user_proto_rawDescOnce sync.Once
@@ -290,20 +374,24 @@ func file_pkg_proto_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_pkg_proto_user_v1_user_proto_rawDescData
 }
 
-var file_pkg_proto_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_pkg_proto_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_pkg_proto_user_v1_user_proto_goTypes = []any{
 	(*ProvisionProfileRequest)(nil),  // 0: betwin.user.v1.ProvisionProfileRequest
 	(*ProvisionProfileResponse)(nil), // 1: betwin.user.v1.ProvisionProfileResponse
 	(*GetPublicProfileRequest)(nil),  // 2: betwin.user.v1.GetPublicProfileRequest
 	(*GetPublicProfileResponse)(nil), // 3: betwin.user.v1.GetPublicProfileResponse
+	(*DeleteProfileRequest)(nil),     // 4: betwin.user.v1.DeleteProfileRequest
+	(*DeleteProfileResponse)(nil),    // 5: betwin.user.v1.DeleteProfileResponse
 }
 var file_pkg_proto_user_v1_user_proto_depIdxs = []int32{
 	0, // 0: betwin.user.v1.UserService.ProvisionProfile:input_type -> betwin.user.v1.ProvisionProfileRequest
 	2, // 1: betwin.user.v1.UserService.GetPublicProfile:input_type -> betwin.user.v1.GetPublicProfileRequest
-	1, // 2: betwin.user.v1.UserService.ProvisionProfile:output_type -> betwin.user.v1.ProvisionProfileResponse
-	3, // 3: betwin.user.v1.UserService.GetPublicProfile:output_type -> betwin.user.v1.GetPublicProfileResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	4, // 2: betwin.user.v1.UserService.DeleteProfile:input_type -> betwin.user.v1.DeleteProfileRequest
+	1, // 3: betwin.user.v1.UserService.ProvisionProfile:output_type -> betwin.user.v1.ProvisionProfileResponse
+	3, // 4: betwin.user.v1.UserService.GetPublicProfile:output_type -> betwin.user.v1.GetPublicProfileResponse
+	5, // 5: betwin.user.v1.UserService.DeleteProfile:output_type -> betwin.user.v1.DeleteProfileResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -320,7 +408,7 @@ func file_pkg_proto_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_proto_user_v1_user_proto_rawDesc), len(file_pkg_proto_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

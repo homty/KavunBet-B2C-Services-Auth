@@ -11,6 +11,9 @@ service WalletService {
     
     // GetBalance retrieves the current coin balance for a user.
     rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+
+    // DeleteWallet removes a wallet created by an incomplete registration.
+    rpc DeleteWallet(DeleteWalletRequest) returns (DeleteWalletResponse);
 }
 
 message ProvisionWalletRequest {
@@ -31,3 +34,9 @@ message GetBalanceResponse {
     int64 user_id = 1;
     int64 balance = 2;
 }
+
+message DeleteWalletRequest {
+    int64 user_id = 1;
+}
+
+message DeleteWalletResponse {}

@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	UserService_ProvisionProfile_FullMethodName = "/betwin.user.v1.UserService/ProvisionProfile"
 	UserService_GetPublicProfile_FullMethodName = "/betwin.user.v1.UserService/GetPublicProfile"
+	UserService_DeleteProfile_FullMethodName    = "/betwin.user.v1.UserService/DeleteProfile"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -33,6 +34,8 @@ type UserServiceClient interface {
 	ProvisionProfile(ctx context.Context, in *ProvisionProfileRequest, opts ...grpc.CallOption) (*ProvisionProfileResponse, error)
 	// GetPublicProfile retrieves public profile details for a given user ID.
 	GetPublicProfile(ctx context.Context, in *GetPublicProfileRequest, opts ...grpc.CallOption) (*GetPublicProfileResponse, error)
+	// DeleteProfile removes an incomplete registration profile during compensation.
+	DeleteProfile(ctx context.Context, in *DeleteProfileRequest, opts ...grpc.CallOption) (*DeleteProfileResponse, error)
 }
 
 type userServiceClient struct {
@@ -63,6 +66,16 @@ func (c *userServiceClient) GetPublicProfile(ctx context.Context, in *GetPublicP
 	return out, nil
 }
 
+func (c *userServiceClient) DeleteProfile(ctx context.Context, in *DeleteProfileRequest, opts ...grpc.CallOption) (*DeleteProfileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteProfileResponse)
+	err := c.cc.Invoke(ctx, UserService_DeleteProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -73,6 +86,8 @@ type UserServiceServer interface {
 	ProvisionProfile(context.Context, *ProvisionProfileRequest) (*ProvisionProfileResponse, error)
 	// GetPublicProfile retrieves public profile details for a given user ID.
 	GetPublicProfile(context.Context, *GetPublicProfileRequest) (*GetPublicProfileResponse, error)
+	// DeleteProfile removes an incomplete registration profile during compensation.
+	DeleteProfile(context.Context, *DeleteProfileRequest) (*DeleteProfileResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -88,6 +103,9 @@ func (UnimplementedUserServiceServer) ProvisionProfile(context.Context, *Provisi
 }
 func (UnimplementedUserServiceServer) GetPublicProfile(context.Context, *GetPublicProfileRequest) (*GetPublicProfileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetPublicProfile not implemented")
+}
+func (UnimplementedUserServiceServer) DeleteProfile(context.Context, *DeleteProfileRequest) (*DeleteProfileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteProfile not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -146,6 +164,24 @@ func _UserService_GetPublicProfile_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_DeleteProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteProfileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).DeleteProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_DeleteProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).DeleteProfile(ctx, req.(*DeleteProfileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -160,6 +196,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPublicProfile",
 			Handler:    _UserService_GetPublicProfile_Handler,
+		},
+		{
+			MethodName: "DeleteProfile",
+			Handler:    _UserService_DeleteProfile_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

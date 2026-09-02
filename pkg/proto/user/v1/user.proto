@@ -11,6 +11,9 @@ service UserService {
     
     // GetPublicProfile retrieves public profile details for a given user ID.
     rpc GetPublicProfile(GetPublicProfileRequest) returns (GetPublicProfileResponse);
+
+    // DeleteProfile removes an incomplete registration profile during compensation.
+    rpc DeleteProfile(DeleteProfileRequest) returns (DeleteProfileResponse);
 }
 
 message ProvisionProfileRequest {
@@ -35,3 +38,9 @@ message GetPublicProfileResponse {
     string avatar_url = 4;
     string bio = 5;
 }
+
+message DeleteProfileRequest {
+    int64 user_id = 1;
+}
+
+message DeleteProfileResponse {}

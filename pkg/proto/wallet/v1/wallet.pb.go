@@ -221,6 +221,86 @@ func (x *GetBalanceResponse) GetBalance() int64 {
 	return 0
 }
 
+type DeleteWalletRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        int64                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteWalletRequest) Reset() {
+	*x = DeleteWalletRequest{}
+	mi := &file_pkg_proto_wallet_v1_wallet_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteWalletRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteWalletRequest) ProtoMessage() {}
+
+func (x *DeleteWalletRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_proto_wallet_v1_wallet_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteWalletRequest.ProtoReflect.Descriptor instead.
+func (*DeleteWalletRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_proto_wallet_v1_wallet_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *DeleteWalletRequest) GetUserId() int64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+type DeleteWalletResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteWalletResponse) Reset() {
+	*x = DeleteWalletResponse{}
+	mi := &file_pkg_proto_wallet_v1_wallet_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteWalletResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteWalletResponse) ProtoMessage() {}
+
+func (x *DeleteWalletResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_proto_wallet_v1_wallet_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteWalletResponse.ProtoReflect.Descriptor instead.
+func (*DeleteWalletResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_proto_wallet_v1_wallet_proto_rawDescGZIP(), []int{5}
+}
+
 var File_pkg_proto_wallet_v1_wallet_proto protoreflect.FileDescriptor
 
 const file_pkg_proto_wallet_v1_wallet_proto_rawDesc = "" +
@@ -236,11 +316,15 @@ const file_pkg_proto_wallet_v1_wallet_proto_rawDesc = "" +
 	"\auser_id\x18\x01 \x01(\x03R\x06userId\"G\n" +
 	"\x12GetBalanceResponse\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x18\n" +
-	"\abalance\x18\x02 \x01(\x03R\abalance2\xd0\x01\n" +
+	"\abalance\x18\x02 \x01(\x03R\abalance\".\n" +
+	"\x13DeleteWalletRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\x03R\x06userId\"\x16\n" +
+	"\x14DeleteWalletResponse2\xaf\x02\n" +
 	"\rWalletService\x12f\n" +
 	"\x0fProvisionWallet\x12(.betwin.wallet.v1.ProvisionWalletRequest\x1a).betwin.wallet.v1.ProvisionWalletResponse\x12W\n" +
 	"\n" +
-	"GetBalance\x12#.betwin.wallet.v1.GetBalanceRequest\x1a$.betwin.wallet.v1.GetBalanceResponseB%Z#betwin/pkg/proto/wallet/v1;walletv1b\x06proto3"
+	"GetBalance\x12#.betwin.wallet.v1.GetBalanceRequest\x1a$.betwin.wallet.v1.GetBalanceResponse\x12]\n" +
+	"\fDeleteWallet\x12%.betwin.wallet.v1.DeleteWalletRequest\x1a&.betwin.wallet.v1.DeleteWalletResponseB%Z#betwin/pkg/proto/wallet/v1;walletv1b\x06proto3"
 
 var (
 	file_pkg_proto_wallet_v1_wallet_proto_rawDescOnce sync.Once
@@ -254,20 +338,24 @@ func file_pkg_proto_wallet_v1_wallet_proto_rawDescGZIP() []byte {
 	return file_pkg_proto_wallet_v1_wallet_proto_rawDescData
 }
 
-var file_pkg_proto_wallet_v1_wallet_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_pkg_proto_wallet_v1_wallet_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_pkg_proto_wallet_v1_wallet_proto_goTypes = []any{
 	(*ProvisionWalletRequest)(nil),  // 0: betwin.wallet.v1.ProvisionWalletRequest
 	(*ProvisionWalletResponse)(nil), // 1: betwin.wallet.v1.ProvisionWalletResponse
 	(*GetBalanceRequest)(nil),       // 2: betwin.wallet.v1.GetBalanceRequest
 	(*GetBalanceResponse)(nil),      // 3: betwin.wallet.v1.GetBalanceResponse
+	(*DeleteWalletRequest)(nil),     // 4: betwin.wallet.v1.DeleteWalletRequest
+	(*DeleteWalletResponse)(nil),    // 5: betwin.wallet.v1.DeleteWalletResponse
 }
 var file_pkg_proto_wallet_v1_wallet_proto_depIdxs = []int32{
 	0, // 0: betwin.wallet.v1.WalletService.ProvisionWallet:input_type -> betwin.wallet.v1.ProvisionWalletRequest
 	2, // 1: betwin.wallet.v1.WalletService.GetBalance:input_type -> betwin.wallet.v1.GetBalanceRequest
-	1, // 2: betwin.wallet.v1.WalletService.ProvisionWallet:output_type -> betwin.wallet.v1.ProvisionWalletResponse
-	3, // 3: betwin.wallet.v1.WalletService.GetBalance:output_type -> betwin.wallet.v1.GetBalanceResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	4, // 2: betwin.wallet.v1.WalletService.DeleteWallet:input_type -> betwin.wallet.v1.DeleteWalletRequest
+	1, // 3: betwin.wallet.v1.WalletService.ProvisionWallet:output_type -> betwin.wallet.v1.ProvisionWalletResponse
+	3, // 4: betwin.wallet.v1.WalletService.GetBalance:output_type -> betwin.wallet.v1.GetBalanceResponse
+	5, // 5: betwin.wallet.v1.WalletService.DeleteWallet:output_type -> betwin.wallet.v1.DeleteWalletResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -284,7 +372,7 @@ func file_pkg_proto_wallet_v1_wallet_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_proto_wallet_v1_wallet_proto_rawDesc), len(file_pkg_proto_wallet_v1_wallet_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
