@@ -1,7 +1,7 @@
 package grpc
 
 import (
-	userv1 "betwin/pkg/proto/user/v1"
+	userv1 "betwin/user-service/api/user/v1"
 	grpcresponse "betwin/user-service/internal/API/grpc/response"
 	"betwin/user-service/internal/service"
 	"context"

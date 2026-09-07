@@ -6,6 +6,7 @@ import (
 	"betwin/user-service/internal/middleware"
 	"betwin/user-service/internal/repository"
 	"betwin/user-service/internal/service"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"io"
@@ -17,16 +18,16 @@ import (
 )
 
 type UserHandler struct {
-	userService service.UserService
-	jwtSecret   string
+	userService  service.UserService
+	jwtPublicKey ed25519.PublicKey
 }
 
 const maxRequestBodyBytes int64 = 1 << 20
 
-func NewUserHandler(userService service.UserService, jwtSecret string) *UserHandler {
+func NewUserHandler(userService service.UserService, jwtPublicKey ed25519.PublicKey) *UserHandler {
 	return &UserHandler{
-		userService: userService,
-		jwtSecret:   jwtSecret,
+		userService:  userService,
+		jwtPublicKey: jwtPublicKey,
 	}
 }
 
@@ -39,7 +40,7 @@ func (handler *UserHandler) RegisterRoutes(router chi.Router) {
 
 	//Isolated APIs from user view
 	router.Group(func(router chi.Router) {
-		router.Use(middleware.AuthMiddleware(handler.jwtSecret))
+		router.Use(middleware.AuthMiddleware(handler.jwtPublicKey))
 		router.Put("/api/v1/users/me", handler.UpdateMyProfile)
 		router.Get("/api/v1/users/me", handler.GetMyProfile)
 	})

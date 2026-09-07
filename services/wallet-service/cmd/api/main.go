@@ -12,22 +12,28 @@ import (
 	"syscall"
 	"time"
 
-	walletv1 "betwin/pkg/proto/wallet/v1"
+	walletv1 "betwin/wallet-service/api/wallet/v1"
 	walletgrpc "betwin/wallet-service/internal/API/grpc/handler"
 	walletrest "betwin/wallet-service/internal/API/rest/handler"
 	"betwin/wallet-service/internal/config"
 	"betwin/wallet-service/internal/database"
+	"betwin/wallet-service/internal/grpctls"
 	"betwin/wallet-service/internal/repository"
 	"betwin/wallet-service/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
+	}
+	cfg.JWTPublicKey, err = config.LoadEd25519PublicKey(cfg.JWTPublicKeyFile)
+	if err != nil {
+		log.Fatalf("Failed to load JWT verification key: %v", err)
 	}
 
 	connectionContext, cancelConnection := context.WithTimeout(context.Background(), 10*time.Second)
@@ -49,12 +55,16 @@ func main() {
 		log.Fatalf("Failed to listen for gRPC on %s: %v", address, err)
 	}
 
-	server := grpc.NewServer()
+	grpcTLSConfig, err := grpctls.ServerConfig(cfg.GRPCTLSCAFile, cfg.GRPCTLSCertFile, cfg.GRPCTLSKeyFile)
+	if err != nil {
+		log.Fatalf("Failed to configure gRPC TLS: %v", err)
+	}
+	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(grpcTLSConfig)))
 	walletv1.RegisterWalletServiceServer(server, walletHandler)
 
 	walletHTTPHandler := walletrest.NewWalletHandler(
 		walletService,
-		cfg.JWTSecret,
+		cfg.JWTPublicKey,
 	)
 
 	router := chi.NewRouter()
@@ -69,7 +79,7 @@ func main() {
 
 	serverErrors := make(chan error, 2)
 	go func() {
-		log.Printf("Wallet gRPC service running on tcp://localhost%s", address)
+		log.Printf("Wallet gRPC service running with mTLS on tcp://localhost%s", address)
 		if err := server.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			serverErrors <- fmt.Errorf("wallet gRPC server: %w", err)
 		}

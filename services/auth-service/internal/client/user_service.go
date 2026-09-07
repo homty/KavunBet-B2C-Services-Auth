@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	userv1 "betwin/pkg/proto/user/v1"
+	userv1 "betwin/auth-service/internal/contracts/user/v1"
 )
 
 const provisioningTimeout = 3 * time.Second

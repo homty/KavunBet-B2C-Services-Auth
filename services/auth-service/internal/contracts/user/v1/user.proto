@@ -2,17 +2,11 @@ syntax = "proto3";
 
 package betwin.user.v1;
 
-option go_package = "betwin/pkg/proto/user/v1;userv1";
+option go_package = "betwin/auth-service/internal/contracts/user/v1;userv1";
 
-// UserService handles profile creation and public profile retrieval.
 service UserService {
-    // ProvisionProfile is called during user registration to set up basic profile info.
     rpc ProvisionProfile(ProvisionProfileRequest) returns (ProvisionProfileResponse);
-    
-    // GetPublicProfile retrieves public profile details for a given user ID.
     rpc GetPublicProfile(GetPublicProfileRequest) returns (GetPublicProfileResponse);
-
-    // DeleteProfile removes an incomplete registration profile during compensation.
     rpc DeleteProfile(DeleteProfileRequest) returns (DeleteProfileResponse);
 }
 

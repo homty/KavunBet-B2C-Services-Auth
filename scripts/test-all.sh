@@ -5,7 +5,6 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repository_root="$(cd -- "$script_dir/.." && pwd)"
 
 modules=(
-    "pkg"
     "services/auth-service"
     "services/user-service"
     "services/wallet-service"
@@ -18,7 +17,7 @@ for module in "${modules[@]}"; do
 
     if ! (
         cd "$repository_root/$module"
-        go test -count=1 "$@" ./...
+        GOWORK=off go test -count=1 "$@" ./...
     ); then
         failed_modules+=("$module")
     fi

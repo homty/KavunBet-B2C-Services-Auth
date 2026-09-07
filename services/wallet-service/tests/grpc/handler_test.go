@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	walletv1 "betwin/pkg/proto/wallet/v1"
+	walletv1 "betwin/wallet-service/api/wallet/v1"
 	walletgrpc "betwin/wallet-service/internal/API/grpc/handler"
 	"betwin/wallet-service/internal/domain"
 	"betwin/wallet-service/internal/service"

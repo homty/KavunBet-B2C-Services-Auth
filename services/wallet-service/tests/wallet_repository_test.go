@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"betwin/pkg/config"
-	"betwin/pkg/database"
+	"betwin/wallet-service/internal/config"
+	"betwin/wallet-service/internal/database"
 	"betwin/wallet-service/internal/repository"
 )
 

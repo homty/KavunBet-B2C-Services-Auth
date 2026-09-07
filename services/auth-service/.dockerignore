@@ -1,0 +1,9 @@
+.git/
+.env
+*.key
+*.crt
+*.pem
+tests/
+*.md
+bin/
+dist/

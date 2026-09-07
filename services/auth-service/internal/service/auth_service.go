@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"strings"
@@ -248,9 +249,9 @@ func (self *authService) generateJWT(userID int64) (string, int64, error) {
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 
-	tokenString, err := token.SignedString([]byte(self.config.JWTSecret))
+	tokenString, err := token.SignedString(self.config.JWTPrivateKey)
 	if err != nil {
 		return "", 0, fmt.Errorf("Failed to transform token into STRING: %w", err)
 	}
@@ -259,12 +260,18 @@ func (self *authService) generateJWT(userID int64) (string, int64, error) {
 }
 
 func (self *authService) ValidateToken(tokenString string) (*JWTClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte(self.config.JWTSecret), nil
-	})
+	publicKey, ok := self.config.JWTPrivateKey.Public().(ed25519.PublicKey)
+	if !ok {
+		return nil, errors.New("JWT private key does not contain an Ed25519 public key")
+	}
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		&JWTClaims{},
+		func(*jwt.Token) (interface{}, error) { return publicKey, nil },
+		jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}),
+		jwt.WithIssuer("betwin-auth-service"),
+		jwt.WithAudience("betwin-api"),
+	)
 
 	if err != nil {
 		return nil, fmt.Errorf("Invalid token: %w", err)

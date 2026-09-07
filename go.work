@@ -1,7 +1,6 @@
 go 1.26.5
 
 use (
-	./pkg
 	./services/auth-service
 	./services/user-service
 	./services/wallet-service

@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package betwin.wallet.v1;
+
+option go_package = "betwin/wallet-service/api/wallet/v1;walletv1";
+
+service WalletService {
+    rpc ProvisionWallet(ProvisionWalletRequest) returns (ProvisionWalletResponse);
+    rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+    rpc DeleteWallet(DeleteWalletRequest) returns (DeleteWalletResponse);
+}
+
+message ProvisionWalletRequest {
+    int64 user_id = 1;
+}
+
+message ProvisionWalletResponse {
+    int64 wallet_id = 1;
+    int64 user_id = 2;
+    int64 balance = 3;
+}
+
+message GetBalanceRequest {
+    int64 user_id = 1;
+}
+
+message GetBalanceResponse {
+    int64 user_id = 1;
+    int64 balance = 2;
+}
+
+message DeleteWalletRequest {
+    int64 user_id = 1;
+}
+
+message DeleteWalletResponse {}

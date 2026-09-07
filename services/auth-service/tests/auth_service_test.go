@@ -1,7 +1,9 @@
 package tests
 
 import (
+	"bytes"
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"strings"
 	"testing"
@@ -11,7 +13,11 @@ import (
 	"betwin/auth-service/internal/domain"
 	"betwin/auth-service/internal/repository"
 	"betwin/auth-service/internal/service"
+
+	"github.com/golang-jwt/jwt/v5"
 )
+
+var unitTestJWTPrivateKey = ed25519.NewKeyFromSeed(bytes.Repeat([]byte{1}, ed25519.SeedSize))
 
 // MockUserRepository simulates PostgreSQL in-memory for fast unit testing.
 type MockUserRepository struct {
@@ -156,8 +162,8 @@ func setupTestAuthServiceWithDependencies() (service.AuthService, *MockUserRepos
 	profileProvisioner := &profileProvisionerStub{}
 	walletProvisioner := &walletProvisionerStub{}
 	cfg := &config.Config{
-		JWTSecret:    "unit_test_jwt_secret_key_12345",
-		AccessJWTTTL: 15 * time.Minute,
+		JWTPrivateKey: unitTestJWTPrivateKey,
+		AccessJWTTTL:  15 * time.Minute,
 	}
 	return service.NewAuthService(mockRepo, profileProvisioner, walletProvisioner, cfg), mockRepo, profileProvisioner, walletProvisioner
 }
@@ -521,5 +527,23 @@ func TestValidateToken_SuccessAndInvalid(t *testing.T) {
 	_, err = authSvc.ValidateToken("invalid.jwt.string")
 	if err == nil {
 		t.Errorf("Expected error when validating invalid token, got nil")
+	}
+}
+
+func TestValidateTokenRejectsHMAC(t *testing.T) {
+	authSvc := setupTestAuthService()
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": "1",
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iss": "betwin-auth-service",
+		"aud": "betwin-api",
+	})
+	tokenString, err := token.SignedString([]byte("legacy-shared-secret"))
+	if err != nil {
+		t.Fatalf("sign HMAC token: %v", err)
+	}
+
+	if _, err := authSvc.ValidateToken(tokenString); err == nil {
+		t.Fatal("expected HS256 token to be rejected")
 	}
 }

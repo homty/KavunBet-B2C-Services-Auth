@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             v7.35.1
-// source: pkg/proto/user/v1/user.proto
+// source: services/auth-service/internal/contracts/user/v1/user.proto
 
 package userv1
 
@@ -27,14 +27,9 @@ const (
 // UserServiceClient is the client API for UserService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-//
-// UserService handles profile creation and public profile retrieval.
 type UserServiceClient interface {
-	// ProvisionProfile is called during user registration to set up basic profile info.
 	ProvisionProfile(ctx context.Context, in *ProvisionProfileRequest, opts ...grpc.CallOption) (*ProvisionProfileResponse, error)
-	// GetPublicProfile retrieves public profile details for a given user ID.
 	GetPublicProfile(ctx context.Context, in *GetPublicProfileRequest, opts ...grpc.CallOption) (*GetPublicProfileResponse, error)
-	// DeleteProfile removes an incomplete registration profile during compensation.
 	DeleteProfile(ctx context.Context, in *DeleteProfileRequest, opts ...grpc.CallOption) (*DeleteProfileResponse, error)
 }
 
@@ -79,14 +74,9 @@ func (c *userServiceClient) DeleteProfile(ctx context.Context, in *DeleteProfile
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
-//
-// UserService handles profile creation and public profile retrieval.
 type UserServiceServer interface {
-	// ProvisionProfile is called during user registration to set up basic profile info.
 	ProvisionProfile(context.Context, *ProvisionProfileRequest) (*ProvisionProfileResponse, error)
-	// GetPublicProfile retrieves public profile details for a given user ID.
 	GetPublicProfile(context.Context, *GetPublicProfileRequest) (*GetPublicProfileResponse, error)
-	// DeleteProfile removes an incomplete registration profile during compensation.
 	DeleteProfile(context.Context, *DeleteProfileRequest) (*DeleteProfileResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
@@ -203,5 +193,5 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "pkg/proto/user/v1/user.proto",
+	Metadata: "services/auth-service/internal/contracts/user/v1/user.proto",
 }

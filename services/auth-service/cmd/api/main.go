@@ -13,16 +13,17 @@ import (
 
 	"betwin/auth-service/internal/client"
 	"betwin/auth-service/internal/config"
+	userv1 "betwin/auth-service/internal/contracts/user/v1"
+	walletv1 "betwin/auth-service/internal/contracts/wallet/v1"
 	"betwin/auth-service/internal/database"
+	"betwin/auth-service/internal/grpctls"
 	"betwin/auth-service/internal/handler"
 	"betwin/auth-service/internal/repository"
 	"betwin/auth-service/internal/service"
-	userv1 "betwin/pkg/proto/user/v1"
-	walletv1 "betwin/pkg/proto/wallet/v1"
 
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
@@ -30,6 +31,10 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
+	}
+	cfg.JWTPrivateKey, err = config.LoadEd25519PrivateKey(cfg.JWTPrivateKeyFile)
+	if err != nil {
+		log.Fatalf("Failed to load JWT signing key: %v", err)
 	}
 
 	//Connect to PostgreSQL pool
@@ -43,9 +48,28 @@ func main() {
 	defer pool.Close()
 	log.Println("Successfully connected to PostgreSQL database!")
 
+	userServiceTLSConfig, err := grpctls.ClientConfig(
+		cfg.GRPCTLSCAFile,
+		cfg.GRPCTLSCertFile,
+		cfg.GRPCTLSKeyFile,
+		cfg.UserServiceGRPCServerName,
+	)
+	if err != nil {
+		log.Fatalf("Failed to configure TLS for user service: %v", err)
+	}
+	walletServiceTLSConfig, err := grpctls.ClientConfig(
+		cfg.GRPCTLSCAFile,
+		cfg.GRPCTLSCertFile,
+		cfg.GRPCTLSKeyFile,
+		cfg.WalletServiceGRPCServerName,
+	)
+	if err != nil {
+		log.Fatalf("Failed to configure TLS for wallet service: %v", err)
+	}
+
 	userServiceConnection, err := grpc.NewClient(
 		cfg.UserServiceGRPCAddress,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(credentials.NewTLS(userServiceTLSConfig)),
 	)
 	if err != nil {
 		log.Fatalf("Failed to configure user service gRPC client: %v", err)
@@ -53,7 +77,7 @@ func main() {
 
 	walletServiceConnection, err := grpc.NewClient(
 		cfg.WalletServiceGRPCAddress,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(credentials.NewTLS(walletServiceTLSConfig)),
 	)
 	if err != nil {
 		_ = userServiceConnection.Close()

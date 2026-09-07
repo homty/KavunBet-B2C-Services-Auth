@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             v7.35.1
-// source: pkg/proto/wallet/v1/wallet.proto
+// source: services/wallet-service/api/wallet/v1/wallet.proto
 
 package walletv1
 
@@ -27,14 +27,9 @@ const (
 // WalletServiceClient is the client API for WalletService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-//
-// WalletService handles wallet provisioning and balance queries.
 type WalletServiceClient interface {
-	// ProvisionWallet is called during user registration to create an initial wallet.
 	ProvisionWallet(ctx context.Context, in *ProvisionWalletRequest, opts ...grpc.CallOption) (*ProvisionWalletResponse, error)
-	// GetBalance retrieves the current coin balance for a user.
 	GetBalance(ctx context.Context, in *GetBalanceRequest, opts ...grpc.CallOption) (*GetBalanceResponse, error)
-	// DeleteWallet removes a wallet created by an incomplete registration.
 	DeleteWallet(ctx context.Context, in *DeleteWalletRequest, opts ...grpc.CallOption) (*DeleteWalletResponse, error)
 }
 
@@ -79,14 +74,9 @@ func (c *walletServiceClient) DeleteWallet(ctx context.Context, in *DeleteWallet
 // WalletServiceServer is the server API for WalletService service.
 // All implementations must embed UnimplementedWalletServiceServer
 // for forward compatibility.
-//
-// WalletService handles wallet provisioning and balance queries.
 type WalletServiceServer interface {
-	// ProvisionWallet is called during user registration to create an initial wallet.
 	ProvisionWallet(context.Context, *ProvisionWalletRequest) (*ProvisionWalletResponse, error)
-	// GetBalance retrieves the current coin balance for a user.
 	GetBalance(context.Context, *GetBalanceRequest) (*GetBalanceResponse, error)
-	// DeleteWallet removes a wallet created by an incomplete registration.
 	DeleteWallet(context.Context, *DeleteWalletRequest) (*DeleteWalletResponse, error)
 	mustEmbedUnimplementedWalletServiceServer()
 }
@@ -203,5 +193,5 @@ var WalletService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "pkg/proto/wallet/v1/wallet.proto",
+	Metadata: "services/wallet-service/api/wallet/v1/wallet.proto",
 }

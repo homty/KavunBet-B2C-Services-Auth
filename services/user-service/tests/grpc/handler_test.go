@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	userv1 "betwin/pkg/proto/user/v1"
+	userv1 "betwin/user-service/api/user/v1"
 	usergrpc "betwin/user-service/internal/API/grpc"
 	"betwin/user-service/internal/domain"
 	"betwin/user-service/internal/repository"

@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"context"
-	"errors"
+	"crypto/ed25519"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,7 +23,7 @@ func GetUserIDFromContext(ctx context.Context) (int64, bool) {
 }
 
 // AuthMiddleware verifies the JWT access token and injects userID into request context.
-func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
+func AuthMiddleware(jwtPublicKey ed25519.PublicKey) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -39,12 +39,13 @@ func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 			}
 
 			tokenString := parts[1]
-			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, errors.New("unexpected signing method")
-				}
-				return []byte(jwtSecret), nil
-			})
+			token, err := jwt.Parse(
+				tokenString,
+				func(*jwt.Token) (interface{}, error) { return jwtPublicKey, nil },
+				jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}),
+				jwt.WithIssuer("betwin-auth-service"),
+				jwt.WithAudience("betwin-api"),
+			)
 
 			if err != nil || !token.Valid {
 				response.RespondWithError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired token")

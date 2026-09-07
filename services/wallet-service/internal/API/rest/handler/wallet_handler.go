@@ -1,10 +1,11 @@
 package handler
 
 import (
-	"betwin/pkg/middleware"
 	"betwin/wallet-service/internal/API/rest/response"
+	"betwin/wallet-service/internal/middleware"
 	"betwin/wallet-service/internal/repository"
 	"betwin/wallet-service/internal/service"
+	"crypto/ed25519"
 	"errors"
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -13,13 +14,13 @@ import (
 
 type WalletHandler struct {
 	walletService service.WalletService
-	jwtSecret     string
+	jwtPublicKey  ed25519.PublicKey
 }
 
-func NewWalletHandler(walletService service.WalletService, jwtSecret string) *WalletHandler {
+func NewWalletHandler(walletService service.WalletService, jwtPublicKey ed25519.PublicKey) *WalletHandler {
 	return &WalletHandler{
 		walletService: walletService,
-		jwtSecret:     jwtSecret,
+		jwtPublicKey:  jwtPublicKey,
 	}
 }
 
@@ -30,7 +31,7 @@ func (handler *WalletHandler) RegisterRoutes(router chi.Router) {
 	router.Get("/health", handler.HealthCheck)
 
 	router.Group(func(router chi.Router) {
-		router.Use(middleware.AuthMiddleware(handler.jwtSecret))
+		router.Use(middleware.AuthMiddleware(handler.jwtPublicKey))
 		router.Get("/api/v1/wallet/balance", handler.GetBalance)
 		router.Post("/api/v1/wallet/daily-claim", handler.ClaimDaily)
 	})

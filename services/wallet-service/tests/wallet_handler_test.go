@@ -1,11 +1,12 @@
 package tests
 
 import (
-	"betwin/pkg/middleware"
 	"betwin/wallet-service/internal/API/rest/handler"
 	"betwin/wallet-service/internal/domain"
+	"betwin/wallet-service/internal/middleware"
 	"betwin/wallet-service/internal/service"
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
 )
+
+var testJWTPrivateKey = ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
+var testJWTPublicKey = testJWTPrivateKey.Public().(ed25519.PublicKey)
 
 type walletServiceSpy struct {
 	getBalanceCalled   bool
@@ -59,7 +63,7 @@ func (spy *walletServiceSpy) ClaimDaily(_ context.Context, userID int64) (*domai
 
 func TestWalletRoutesDoNotExposeWalletByID(t *testing.T) {
 	router := chi.NewRouter()
-	walletHandler := handler.NewWalletHandler(&walletServiceSpy{}, "test-secret")
+	walletHandler := handler.NewWalletHandler(&walletServiceSpy{}, testJWTPublicKey)
 	walletHandler.RegisterRoutes(router)
 
 	routes := make(map[string]bool)
@@ -80,7 +84,7 @@ func TestWalletRoutesDoNotExposeWalletByID(t *testing.T) {
 
 func TestGetBalanceUsesAuthenticatedUserID(t *testing.T) {
 	spy := &walletServiceSpy{}
-	walletHandler := handler.NewWalletHandler(spy, "test-secret")
+	walletHandler := handler.NewWalletHandler(spy, testJWTPublicKey)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/wallet/balance", nil)
 	request = request.WithContext(context.WithValue(request.Context(), middleware.UserIDKey, int64(41)))
 	recorder := httptest.NewRecorder()
@@ -98,7 +102,7 @@ func TestGetBalanceUsesAuthenticatedUserID(t *testing.T) {
 func TestGetBalanceRequiresAuthentication(t *testing.T) {
 	spy := &walletServiceSpy{}
 	router := chi.NewRouter()
-	handler.NewWalletHandler(spy, "test-secret").RegisterRoutes(router)
+	handler.NewWalletHandler(spy, testJWTPublicKey).RegisterRoutes(router)
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/wallet/balance", nil)
 	recorder := httptest.NewRecorder()
@@ -127,8 +131,7 @@ func TestGetBalanceRequiresAuthentication(t *testing.T) {
 
 func TestGetBalanceWithValidToken(t *testing.T) {
 	const (
-		jwtSecret = "test-secret"
-		userID    = int64(41)
+		userID = int64(41)
 	)
 
 	expected := &domain.WalletBalanceResponse{
@@ -139,10 +142,10 @@ func TestGetBalanceWithValidToken(t *testing.T) {
 	}
 	spy := &walletServiceSpy{getBalanceResponse: expected}
 	router := chi.NewRouter()
-	handler.NewWalletHandler(spy, jwtSecret).RegisterRoutes(router)
+	handler.NewWalletHandler(spy, testJWTPublicKey).RegisterRoutes(router)
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/wallet/balance", nil)
-	request.Header.Set("Authorization", "Bearer "+signWalletTestToken(t, jwtSecret, userID))
+	request.Header.Set("Authorization", "Bearer "+signWalletTestToken(t, userID))
 	recorder := httptest.NewRecorder()
 
 	router.ServeHTTP(recorder, request)
@@ -169,7 +172,7 @@ func TestGetBalanceWithValidToken(t *testing.T) {
 func TestClaimDailyRequiresAuthentication(t *testing.T) {
 	spy := &walletServiceSpy{}
 	router := chi.NewRouter()
-	handler.NewWalletHandler(spy, "test-secret").RegisterRoutes(router)
+	handler.NewWalletHandler(spy, testJWTPublicKey).RegisterRoutes(router)
 
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/wallet/daily-claim", nil)
 	recorder := httptest.NewRecorder()
@@ -186,8 +189,7 @@ func TestClaimDailyRequiresAuthentication(t *testing.T) {
 
 func TestClaimDailyWithValidToken(t *testing.T) {
 	const (
-		jwtSecret = "test-secret"
-		userID    = int64(41)
+		userID = int64(41)
 	)
 
 	expected := &domain.DailyClaimResponse{
@@ -198,10 +200,10 @@ func TestClaimDailyWithValidToken(t *testing.T) {
 	}
 	spy := &walletServiceSpy{claimDailyResponse: expected}
 	router := chi.NewRouter()
-	handler.NewWalletHandler(spy, jwtSecret).RegisterRoutes(router)
+	handler.NewWalletHandler(spy, testJWTPublicKey).RegisterRoutes(router)
 
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/wallet/daily-claim", nil)
-	request.Header.Set("Authorization", "Bearer "+signWalletTestToken(t, jwtSecret, userID))
+	request.Header.Set("Authorization", "Bearer "+signWalletTestToken(t, userID))
 	recorder := httptest.NewRecorder()
 
 	router.ServeHTTP(recorder, request)
@@ -225,15 +227,17 @@ func TestClaimDailyWithValidToken(t *testing.T) {
 	}
 }
 
-func signWalletTestToken(t *testing.T, secret string, userID int64) string {
+func signWalletTestToken(t *testing.T, userID int64) string {
 	t.Helper()
 
 	claims := jwt.MapClaims{
 		"sub": strconv.FormatInt(userID, 10),
 		"exp": time.Now().Add(time.Hour).Unix(),
+		"iss": "betwin-auth-service",
+		"aud": "betwin-api",
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(secret))
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+	signedToken, err := token.SignedString(testJWTPrivateKey)
 	if err != nil {
 		t.Fatalf("failed to sign test token: %v", err)
 	}

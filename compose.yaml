@@ -1,0 +1,225 @@
+name: betwin
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-betwin_dev}
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:-betwin}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+
+    secrets:
+      - postgres_admin_password
+
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    networks:
+      - shared-data
+
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+    image: betwin/auth-service:staging
+    restart: unless-stopped
+
+    environment:
+      HTTP_PORT: "8081"
+
+      DATABASE_URL_FILE: /run/secrets/auth_database_url
+      JWT_PRIVATE_KEY_FILE: /run/secrets/jwt_private_key
+
+
+      USER_SERVICE_GRPC_ADDRESS: user-service:50051
+      WALLET_SERVICE_GRPC_ADDRESS: wallet-service:50052
+      USER_SERVICE_GRPC_SERVER_NAME: user-service
+      WALLET_SERVICE_GRPC_SERVER_NAME: wallet-service
+
+      GRPC_TLS_CA_FILE: /run/secrets/internal_ca
+      GRPC_TLS_CERT_FILE: /run/secrets/auth_grpc_cert
+      GRPC_TLS_KEY_FILE: /run/secrets/auth_grpc_key
+
+    secrets:
+      - auth_database_url
+      - jwt_private_key
+      - internal_ca
+      - auth_grpc_cert
+      - auth_grpc_key
+
+    networks:
+      - services
+      - shared-data
+
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+      user-service:
+        condition: service_started
+      wallet-service:
+        condition: service_started
+  user-service:
+    build:
+      context: ./services/user-service
+    image: betwin/user-service:staging
+    restart: unless-stopped
+
+    environment:
+      HTTP_PORT: "8082"
+      GRPC_PORT: "50051"
+
+      DATABASE_URL_FILE: /run/secrets/user_database_url
+      JWT_PUBLIC_KEY_FILE: /run/secrets/jwt_public_key
+
+      GRPC_TLS_CA_FILE: /run/secrets/internal_ca
+      GRPC_TLS_CERT_FILE: /run/secrets/user_grpc_cert
+      GRPC_TLS_KEY_FILE: /run/secrets/user_grpc_key
+
+    secrets:
+      - user_database_url
+      - jwt_public_key
+      - internal_ca
+      - user_grpc_cert
+      - user_grpc_key
+
+    networks:
+      - services
+      - shared-data
+
+  # we don't depend on the other services, because it creates cycle
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+    
+
+  wallet-service:
+    build:
+      context: ./services/wallet-service
+    image: betwin/wallet-service:staging
+    restart: unless-stopped
+
+    environment:
+      HTTP_PORT: "8083"
+      GRPC_PORT: "50052"
+
+      DATABASE_URL_FILE: /run/secrets/wallet_database_url
+      JWT_PUBLIC_KEY_FILE: /run/secrets/jwt_public_key
+
+      GRPC_TLS_CA_FILE: /run/secrets/internal_ca
+      GRPC_TLS_CERT_FILE: /run/secrets/wallet_grpc_cert
+      GRPC_TLS_KEY_FILE: /run/secrets/wallet_grpc_key
+
+    secrets:
+      - wallet_database_url
+      - jwt_public_key
+      - internal_ca
+      - wallet_grpc_cert
+      - wallet_grpc_key
+
+    networks:
+      - services
+      - shared-data
+
+  # we don't depend on the other services, because it creates cycle
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+
+  db-bootstrap:
+    image: postgres:18
+    restart: "no"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-betwin_dev}
+      PGUSER: ${POSTGRES_ADMIN_USER:-betwin}
+
+    secrets:
+      - postgres_admin_password
+      - auth_db_password
+      - user_db_password
+      - wallet_db_password
+
+    volumes:
+      - ./db/init/bootstrap-roles.sh:/scripts/bootstrap-roles.sh:ro
+    
+    networks:
+      - shared-data
+
+    entrypoint:
+      - /bin/bash
+      - -ec
+      - |
+        export PGPASSWORD="$$(cat /run/secrets/postgres_admin_password)"
+        export AUTH_DB_PASSWORD="$$(cat /run/secrets/auth_db_password)"
+        export USER_DB_PASSWORD="$$(cat /run/secrets/user_db_password)"
+        export WALLET_DB_PASSWORD="$$(cat /run/secrets/wallet_db_password)"
+        exec /scripts/bootstrap-roles.sh
+
+networks:
+  services:
+    internal: true
+  shared-data:
+    internal: true
+
+secrets:
+  postgres_admin_password:
+    file: ./secrets/postgres_admin_password
+  
+  auth_db_password:
+    file: ./secrets/auth_db_password
+  user_db_password:
+    file: ./secrets/user_db_password
+  wallet_db_password:
+    file: ./secrets/wallet_db_password
+  
+  
+  auth_database_url:
+    file: ./secrets/auth_database_url
+  user_database_url:
+    file: ./secrets/user_database_url
+  wallet_database_url:
+    file: ./secrets/wallet_database_url
+  
+  jwt_private_key:
+    file: ./secrets/jwt_private_key.pem
+  jwt_public_key:
+    file: ./secrets/jwt_public_key.pem
+  
+  internal_ca:
+    file: ./secrets/internal_ca.crt
+
+  auth_grpc_cert:
+    file: ./secrets/auth-service.crt
+  auth_grpc_key:
+    file: ./secrets/auth-service.key
+  
+  user_grpc_cert:
+    file: ./secrets/user-service.crt
+  user_grpc_key:
+    file: ./secrets/user-service.key
+
+  wallet_grpc_cert:
+    file: ./secrets/wallet-service.crt
+  wallet_grpc_key:
+    file: ./secrets/wallet-service.key
+  
+
+volumes:
+  postgres_data:
+
+

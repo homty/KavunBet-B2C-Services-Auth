@@ -1,11 +1,12 @@
 package main
 
 import (
-	userv1 "betwin/pkg/proto/user/v1"
+	userv1 "betwin/user-service/api/user/v1"
 	usergrpc "betwin/user-service/internal/API/grpc"
 	userrest "betwin/user-service/internal/API/rest/handler"
 	"betwin/user-service/internal/config"
 	"betwin/user-service/internal/database"
+	"betwin/user-service/internal/grpctls"
 	"betwin/user-service/internal/repository"
 	"betwin/user-service/internal/service"
 	"context"
@@ -21,12 +22,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
+	}
+	cfg.JWTPublicKey, err = config.LoadEd25519PublicKey(cfg.JWTPublicKeyFile)
+	if err != nil {
+		log.Fatalf("Failed to load JWT verification key: %v", err)
 	}
 
 	connectionContext, cancelConnection := context.WithTimeout(context.Background(), 10*time.Second)
@@ -49,11 +55,15 @@ func main() {
 	}
 	defer grpcListener.Close()
 
-	grpcServer := grpc.NewServer()
+	grpcTLSConfig, err := grpctls.ServerConfig(cfg.GRPCTLSCAFile, cfg.GRPCTLSCertFile, cfg.GRPCTLSKeyFile)
+	if err != nil {
+		log.Fatalf("Failed to configure gRPC TLS: %v", err)
+	}
+	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(grpcTLSConfig)))
 	userGrpcHandler := usergrpc.NewUserGRPCHandler(userService)
 	userv1.RegisterUserServiceServer(grpcServer, userGrpcHandler)
 
-	userHTTPHandler := userrest.NewUserHandler(userService, cfg.JWTSecret)
+	userHTTPHandler := userrest.NewUserHandler(userService, cfg.JWTPublicKey)
 
 	router := chi.NewRouter()
 	userHTTPHandler.RegisterRoutes(router)
@@ -68,7 +78,7 @@ func main() {
 	serverErrors := make(chan error, 2)
 
 	go func() {
-		log.Printf("gRPC server is running on tcp://localhost%s", grpcAddress)
+		log.Printf("gRPC server is running with mTLS on tcp://localhost%s", grpcAddress)
 		if err := grpcServer.Serve(grpcListener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			serverErrors <- fmt.Errorf("gRPC server stopped unexpectedly: %w", err)
 		}

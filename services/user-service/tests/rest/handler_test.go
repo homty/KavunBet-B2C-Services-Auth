@@ -7,6 +7,7 @@ import (
 	"betwin/user-service/internal/repository"
 	"betwin/user-service/internal/service"
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"testing"
 )
+
+var testJWTPublicKey = ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)).Public().(ed25519.PublicKey)
 
 type userServiceSpy struct {
 	updateCalled bool
@@ -61,7 +64,7 @@ func TestGetMyProfileNotFound(t *testing.T) {
 	spy := &userServiceSpy{
 		getMyProfileError: repository.ErrProfileNotFound,
 	}
-	userHandler := handler.NewUserHandler(spy, "test-secret")
+	userHandler := handler.NewUserHandler(spy, testJWTPublicKey)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -93,7 +96,7 @@ func TestGetMyProfileSuccess(t *testing.T) {
 	spy := &userServiceSpy{
 		profileData: &profile,
 	}
-	userHandler := handler.NewUserHandler(spy, "test-secret")
+	userHandler := handler.NewUserHandler(spy, testJWTPublicKey)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -136,7 +139,7 @@ func TestGetMyProfileInternalError(t *testing.T) {
 	spy := &userServiceSpy{
 		getMyProfileError: errors.New("database unavailable"),
 	}
-	userHandler := handler.NewUserHandler(spy, "test-secret")
+	userHandler := handler.NewUserHandler(spy, testJWTPublicKey)
 
 	request := httptest.NewRequest( //Request (method, path, body)
 		http.MethodGet,
@@ -164,7 +167,7 @@ func TestGetMyProfileInternalError(t *testing.T) {
 }
 func TestUpdateMyProfile(t *testing.T) {
 	spy := &userServiceSpy{}
-	userHandler := handler.NewUserHandler(spy, "test-secret")
+	userHandler := handler.NewUserHandler(spy, testJWTPublicKey)
 
 	body := strings.NewReader(`{"display_name":"TESTER"}`)
 

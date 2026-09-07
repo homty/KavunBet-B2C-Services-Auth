@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 
-	walletv1 "betwin/pkg/proto/wallet/v1"
+	walletv1 "betwin/wallet-service/api/wallet/v1"
 	grpcresponse "betwin/wallet-service/internal/API/grpc/response"
 	"betwin/wallet-service/internal/service"
 )

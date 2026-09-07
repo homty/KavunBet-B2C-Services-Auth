@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package betwin.user.v1;
+
+option go_package = "betwin/user-service/api/user/v1;userv1";
+
+service UserService {
+    rpc ProvisionProfile(ProvisionProfileRequest) returns (ProvisionProfileResponse);
+    rpc GetPublicProfile(GetPublicProfileRequest) returns (GetPublicProfileResponse);
+    rpc DeleteProfile(DeleteProfileRequest) returns (DeleteProfileResponse);
+}
+
+message ProvisionProfileRequest {
+    int64 user_id = 1;
+    string username = 2;
+    string contact_info = 3;
+}
+
+message ProvisionProfileResponse {
+    int64 user_id = 1;
+    string username = 2;
+}
+
+message GetPublicProfileRequest {
+    int64 target_user_id = 1;
+}
+
+message GetPublicProfileResponse {
+    int64 user_id = 1;
+    string username = 2;
+    string display_name = 3;
+    string avatar_url = 4;
+    string bio = 5;
+}
+
+message DeleteProfileRequest {
+    int64 user_id = 1;
+}
+
+message DeleteProfileResponse {}

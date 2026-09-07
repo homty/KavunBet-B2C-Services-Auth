@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	walletv1 "betwin/pkg/proto/wallet/v1"
+	walletv1 "betwin/auth-service/internal/contracts/wallet/v1"
 )
 
 const walletProvisioningTimeout = 3 * time.Second
